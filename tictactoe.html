@@ -453,19 +453,20 @@
 
       board[selectedMove] = COMPUTER;
       winningLine = getWinningLine(board, COMPUTER);
-      renderBoard();
-
       if (winningLine) {
+        renderBoard();
         finishGame("Computer wins.", true);
         return;
       }
 
       if (checkDraw(board)) {
+        renderBoard();
         finishGame("It\'s a draw.");
         return;
       }
 
       currentPlayer = PLAYER;
+      renderBoard();
       updateStatus("Your turn: place an X.");
       updateTurnIndicator();
     }

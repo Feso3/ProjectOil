@@ -416,19 +416,21 @@
 
       board[index] = PLAYER;
       winningLine = getWinningLine(board, PLAYER);
-      renderBoard();
 
       if (winningLine) {
+        renderBoard();
         finishGame("You win!", true);
         return;
       }
 
       if (checkDraw(board)) {
+        renderBoard();
         finishGame("It\'s a draw.");
         return;
       }
 
       currentPlayer = COMPUTER;
+      renderBoard();
       updateStatus("Computer is thinking...", false, true);
       updateTurnIndicator();
       aiTimeoutId = setTimeout(() => {

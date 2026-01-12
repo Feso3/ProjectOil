@@ -7,7 +7,7 @@
   <style>
     :root {
       color-scheme: light;
-      --bg: #f5f7fb;
+      --bg: linear-gradient(135deg, #e8f0ff 0%, #fdf6ff 55%, #f4fbff 100%);
       --panel: #ffffff;
       --line: #c9d4e5;
       --accent: #2f5fe8;
@@ -44,6 +44,16 @@
       gap: 16px;
       align-items: center;
       text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+    }
+
+    .game.over {
+      background: #f8faff;
+      box-shadow: 0 24px 50px rgba(25, 35, 57, 0.18);
+    }
+
+    .game.win {
+      animation: celebrate 0.9s ease-in-out;
     }
 
     h1 {
@@ -51,10 +61,55 @@
       font-size: 1.8rem;
     }
 
+    .turn-indicator {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .turn-indicator .token {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: #f6f8ff;
+      transition: all 0.2s ease;
+    }
+
+    .turn-indicator .token.active {
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 6px 16px rgba(47, 95, 232, 0.25);
+    }
+
+    .turn-indicator .token.x.active {
+      background: var(--x);
+    }
+
+    .turn-indicator .token.o.active {
+      background: var(--o);
+    }
+
     #status {
       font-size: 1rem;
       color: var(--muted);
       min-height: 1.4em;
+      transition: color 0.2s ease;
+    }
+
+    #status.thinking::after {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-left: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 0.9s ease-in-out infinite;
+      vertical-align: middle;
     }
 
     .board {
@@ -64,14 +119,18 @@
       gap: 8px;
       width: 100%;
       max-width: 360px;
+      padding: 8px;
+      border-radius: 16px;
+      background: #f5f7ff;
+      box-shadow: inset 0 0 0 1px rgba(201, 212, 229, 0.6), 0 12px 24px rgba(27, 51, 106, 0.12);
     }
 
     .cell {
       background: #fdfdff;
       border: 2px solid var(--line);
       border-radius: 12px;
-      font-size: clamp(2rem, 5vw, 2.6rem);
-      font-weight: 700;
+      font-size: clamp(2.4rem, 7vw, 3.2rem);
+      font-weight: 800;
       color: #1d2433;
       cursor: pointer;
       transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
@@ -81,18 +140,36 @@
       aspect-ratio: 1 / 1;
     }
 
+    .cell.filled {
+      animation: fadeIn 0.3s ease-out;
+    }
+
     .cell.x {
       color: var(--x);
+      text-shadow: 0 6px 14px rgba(27, 110, 243, 0.35);
     }
 
     .cell.o {
       color: var(--o);
+      text-shadow: 0 6px 14px rgba(232, 74, 95, 0.35);
     }
 
     .cell.empty:hover {
       border-color: var(--accent);
-      transform: translateY(-2px);
+      transform: scale(1.04);
       background: #f2f6ff;
+    }
+
+    .cell:disabled {
+      cursor: not-allowed;
+      opacity: 0.8;
+      background: #f8f9ff;
+    }
+
+    .cell.winning {
+      border-color: var(--win);
+      box-shadow: 0 0 0 2px rgba(32, 178, 107, 0.25);
+      animation: glow 1s ease-in-out infinite;
     }
 
     .game.over .cell {
@@ -114,11 +191,20 @@
       border-radius: 999px;
       font-size: 0.95rem;
       cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.2s ease;
+      transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+    }
+
+    .game.over .play-again {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
     }
 
     .play-again:hover {
-      transform: translateY(-1px);
+      transform: translateY(-2px) scale(1.01);
       box-shadow: 0 10px 20px rgba(47, 95, 232, 0.2);
     }
 
@@ -130,6 +216,51 @@
     .message-win {
       color: var(--win);
       font-weight: 600;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes pulse {
+      0%,
+      100% {
+        transform: scale(0.8);
+        opacity: 0.6;
+      }
+      50% {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+    }
+
+    @keyframes glow {
+      0%,
+      100% {
+        box-shadow: 0 0 0 2px rgba(32, 178, 107, 0.25);
+      }
+      50% {
+        box-shadow: 0 0 12px rgba(32, 178, 107, 0.5);
+      }
+    }
+
+    @keyframes celebrate {
+      0% {
+        transform: scale(1);
+      }
+      40% {
+        transform: scale(1.02);
+      }
+      100% {
+        transform: scale(1);
+      }
     }
 
     @media (max-width: 480px) {
@@ -146,6 +277,10 @@
 <body>
   <main class="game" id="game">
     <h1>Tic-Tac-Toe</h1>
+    <div class="turn-indicator" aria-label="Current turn">
+      <span class="token x" id="turn-x">X Player</span>
+      <span class="token o" id="turn-o">O Computer</span>
+    </div>
     <div id="status">Your turn: place an X.</div>
     <div class="board" id="board" aria-label="Tic-tac-toe board"></div>
     <button class="play-again" id="reset">Play Again</button>
@@ -160,11 +295,14 @@
     const statusElement = document.getElementById("status");
     const resetButton = document.getElementById("reset");
     const gameElement = document.getElementById("game");
+    const turnXElement = document.getElementById("turn-x");
+    const turnOElement = document.getElementById("turn-o");
 
     let board = Array(9).fill(EMPTY);
     let currentPlayer = PLAYER;
     let gameOver = false;
     let aiTimeoutId = null;
+    let winningLine = null;
 
     const winLines = [
       [0, 1, 2],
@@ -182,17 +320,33 @@
       board.forEach((value, index) => {
         const cell = document.createElement("button");
         cell.type = "button";
-        cell.className = `cell ${value ? value.toLowerCase() : "empty"}`;
+        const baseClass = value ? value.toLowerCase() : "empty";
+        const filledClass = value ? "filled" : "";
+        const isWinning = winningLine && winningLine.includes(index);
+        cell.className = `cell ${baseClass} ${filledClass} ${isWinning ? "winning" : ""}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", index);
         cell.addEventListener("click", handlePlayerMove);
+        cell.disabled = value !== EMPTY || gameOver || currentPlayer !== PLAYER;
         boardElement.appendChild(cell);
       });
     }
 
-    function updateStatus(message, isWin = false) {
+    function updateStatus(message, isWin = false, isThinking = false) {
       statusElement.textContent = message;
       statusElement.classList.toggle("message-win", isWin);
+      statusElement.classList.toggle("thinking", isThinking);
+    }
+
+    function updateTurnIndicator() {
+      const isPlayerTurn = currentPlayer === PLAYER && !gameOver;
+      const isComputerTurn = currentPlayer === COMPUTER && !gameOver;
+      turnXElement.classList.toggle("active", isPlayerTurn);
+      turnOElement.classList.toggle("active", isComputerTurn);
+    }
+
+    function getWinningLine(state, symbol) {
+      return winLines.find(line => line.every(index => state[index] === symbol)) || null;
     }
 
     function checkWin(state, symbol) {
@@ -245,7 +399,9 @@
     function finishGame(message, isWin = false) {
       gameOver = true;
       gameElement.classList.add("over");
-      updateStatus(message, isWin);
+      gameElement.classList.toggle("win", isWin);
+      updateStatus(message, isWin, false);
+      updateTurnIndicator();
     }
 
     function handlePlayerMove(event) {
@@ -259,9 +415,10 @@
       }
 
       board[index] = PLAYER;
+      winningLine = getWinningLine(board, PLAYER);
       renderBoard();
 
-      if (checkWin(board, PLAYER)) {
+      if (winningLine) {
         finishGame("You win!", true);
         return;
       }
@@ -272,7 +429,8 @@
       }
 
       currentPlayer = COMPUTER;
-      updateStatus("Computer is thinking...");
+      updateStatus("Computer is thinking...", false, true);
+      updateTurnIndicator();
       aiTimeoutId = setTimeout(() => {
         aiTimeoutId = null;
         handleComputerMove();
@@ -292,9 +450,10 @@
       }
 
       board[selectedMove] = COMPUTER;
+      winningLine = getWinningLine(board, COMPUTER);
       renderBoard();
 
-      if (checkWin(board, COMPUTER)) {
+      if (winningLine) {
         finishGame("Computer wins.", true);
         return;
       }
@@ -306,6 +465,7 @@
 
       currentPlayer = PLAYER;
       updateStatus("Your turn: place an X.");
+      updateTurnIndicator();
     }
 
     function resetGame() {
@@ -316,14 +476,18 @@
       board = Array(9).fill(EMPTY);
       currentPlayer = PLAYER;
       gameOver = false;
+      winningLine = null;
       gameElement.classList.remove("over");
+      gameElement.classList.remove("win");
       updateStatus("Your turn: place an X.");
       renderBoard();
+      updateTurnIndicator();
     }
 
     resetButton.addEventListener("click", resetGame);
 
     renderBoard();
+    updateTurnIndicator();
   </script>
 </body>
 </html>

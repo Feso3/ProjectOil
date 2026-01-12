@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tic-Tac-Toe</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #c9d4e5;
+      --accent: #2f5fe8;
+      --x: #1b6ef3;
+      --o: #e84a5f;
+      --muted: #5c667a;
+      --win: #20b26b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: #1d2433;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .game {
+      background: var(--panel);
+      padding: 28px;
+      border-radius: 18px;
+      box-shadow: 0 20px 40px rgba(25, 35, 57, 0.12);
+      width: min(420px, 92vw);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.8rem;
+    }
+
+    #status {
+      font-size: 1rem;
+      color: var(--muted);
+      min-height: 1.4em;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(70px, 1fr));
+      grid-template-rows: repeat(3, minmax(70px, 1fr));
+      gap: 8px;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .cell {
+      background: #fdfdff;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      font-size: clamp(2rem, 5vw, 2.6rem);
+      font-weight: 700;
+      color: #1d2433;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1 / 1;
+    }
+
+    .cell.x {
+      color: var(--x);
+    }
+
+    .cell.o {
+      color: var(--o);
+    }
+
+    .cell.empty:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      background: #f2f6ff;
+    }
+
+    .game.over .cell {
+      cursor: not-allowed;
+      opacity: 0.9;
+    }
+
+    .game.over .cell.empty:hover {
+      transform: none;
+      border-color: var(--line);
+      background: #fdfdff;
+    }
+
+    .play-again {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+
+    .play-again:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(47, 95, 232, 0.2);
+    }
+
+    .play-again:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    .message-win {
+      color: var(--win);
+      font-weight: 600;
+    }
+
+    @media (max-width: 480px) {
+      .game {
+        padding: 22px 18px;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="game" id="game">
+    <h1>Tic-Tac-Toe</h1>
+    <div id="status">Your turn: place an X.</div>
+    <div class="board" id="board" aria-label="Tic-tac-toe board"></div>
+    <button class="play-again" id="reset">Play Again</button>
+  </main>
+
+  <script>
+    const PLAYER = "X";
+    const COMPUTER = "O";
+    const EMPTY = "";
+
+    const boardElement = document.getElementById("board");
+    const statusElement = document.getElementById("status");
+    const resetButton = document.getElementById("reset");
+    const gameElement = document.getElementById("game");
+
+    let board = Array(9).fill(EMPTY);
+    let currentPlayer = PLAYER;
+    let gameOver = false;
+    let aiTimeoutId = null;
+
+    const winLines = [
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6]
+    ];
+
+    function renderBoard() {
+      boardElement.innerHTML = "";
+      board.forEach((value, index) => {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = `cell ${value ? value.toLowerCase() : "empty"}`;
+        cell.textContent = value;
+        cell.setAttribute("data-index", index);
+        cell.addEventListener("click", handlePlayerMove);
+        boardElement.appendChild(cell);
+      });
+    }
+
+    function updateStatus(message, isWin = false) {
+      statusElement.textContent = message;
+      statusElement.classList.toggle("message-win", isWin);
+    }
+
+    function checkWin(state, symbol) {
+      return winLines.some(line => line.every(index => state[index] === symbol));
+    }
+
+    function checkDraw(state) {
+      return state.every(cell => cell !== EMPTY);
+    }
+
+    function getAvailableMoves(state) {
+      return state
+        .map((value, index) => (value === EMPTY ? index : null))
+        .filter(index => index !== null);
+    }
+
+    function minimax(state, isMaximizing) {
+      if (checkWin(state, COMPUTER)) {
+        return { score: 1 };
+      }
+      if (checkWin(state, PLAYER)) {
+        return { score: -1 };
+      }
+      if (checkDraw(state)) {
+        return { score: 0 };
+      }
+
+      const availableMoves = getAvailableMoves(state);
+      let bestMove = null;
+      let bestScore = isMaximizing ? -Infinity : Infinity;
+
+      availableMoves.forEach(move => {
+        state[move] = isMaximizing ? COMPUTER : PLAYER;
+        const { score } = minimax(state, !isMaximizing);
+        state[move] = EMPTY;
+
+        if (isMaximizing && score > bestScore) {
+          bestScore = score;
+          bestMove = move;
+        }
+        if (!isMaximizing && score < bestScore) {
+          bestScore = score;
+          bestMove = move;
+        }
+      });
+
+      return { score: bestScore, move: bestMove };
+    }
+
+    function finishGame(message, isWin = false) {
+      gameOver = true;
+      gameElement.classList.add("over");
+      updateStatus(message, isWin);
+    }
+
+    function handlePlayerMove(event) {
+      if (gameOver || currentPlayer !== PLAYER) {
+        return;
+      }
+
+      const index = Number(event.currentTarget.getAttribute("data-index"));
+      if (board[index] !== EMPTY) {
+        return;
+      }
+
+      board[index] = PLAYER;
+      renderBoard();
+
+      if (checkWin(board, PLAYER)) {
+        finishGame("You win!", true);
+        return;
+      }
+
+      if (checkDraw(board)) {
+        finishGame("It\'s a draw.");
+        return;
+      }
+
+      currentPlayer = COMPUTER;
+      updateStatus("Computer is thinking...");
+      aiTimeoutId = setTimeout(() => {
+        aiTimeoutId = null;
+        handleComputerMove();
+      }, 400);
+    }
+
+    function handleComputerMove() {
+      if (gameOver || currentPlayer !== COMPUTER) {
+        return;
+      }
+
+      const { move } = minimax([...board], true);
+      const selectedMove = move ?? getAvailableMoves(board)[0];
+      if (selectedMove === undefined) {
+        finishGame("It\'s a draw.");
+        return;
+      }
+
+      board[selectedMove] = COMPUTER;
+      renderBoard();
+
+      if (checkWin(board, COMPUTER)) {
+        finishGame("Computer wins.", true);
+        return;
+      }
+
+      if (checkDraw(board)) {
+        finishGame("It\'s a draw.");
+        return;
+      }
+
+      currentPlayer = PLAYER;
+      updateStatus("Your turn: place an X.");
+    }
+
+    function resetGame() {
+      if (aiTimeoutId !== null) {
+        clearTimeout(aiTimeoutId);
+        aiTimeoutId = null;
+      }
+      board = Array(9).fill(EMPTY);
+      currentPlayer = PLAYER;
+      gameOver = false;
+      gameElement.classList.remove("over");
+      updateStatus("Your turn: place an X.");
+      renderBoard();
+    }
+
+    resetButton.addEventListener("click", resetGame);
+
+    renderBoard();
+  </script>
+</body>
+</html>

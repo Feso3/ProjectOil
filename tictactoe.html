@@ -97,6 +97,26 @@
       border-color: transparent;
     }
 
+    .difficulty-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: #ecf1ff;
+      color: var(--accent);
+      font-weight: 700;
+      box-shadow: inset 0 0 0 1px rgba(201, 212, 229, 0.9);
+    }
+
+    .difficulty-indicator .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(47, 95, 232, 0.15);
+    }
+
     .turn-indicator {
       display: flex;
       gap: 10px;
@@ -239,6 +259,42 @@
       justify-content: center;
     }
 
+    .difficulty-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .difficulty-controls p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .difficulty-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .difficulty-button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 10px 18px rgba(47, 95, 232, 0.24);
+    }
+
+    .difficulty-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+      box-shadow: none;
+    }
+
     .button {
       border: none;
       background: var(--accent);
@@ -377,6 +433,10 @@
       .button {
         flex: 1 1 140px;
       }
+
+      .difficulty-buttons .button {
+        flex: 1 1 90px;
+      }
     }
   </style>
 </head>
@@ -387,6 +447,10 @@
       Player: <span id="score-player">0</span> wins | Computer: <span id="score-computer">0</span> wins | Draws: <span id="score-draws">0</span>
     </div>
     <div class="game-state" id="game-state">In progress</div>
+    <div class="difficulty-indicator" id="difficulty-indicator" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="difficulty-label">Difficulty: Medium</span>
+    </div>
     <div class="turn-indicator" aria-label="Current turn">
       <span class="token x" id="turn-x">X Player</span>
       <span class="token o" id="turn-o">O Computer</span>
@@ -398,6 +462,14 @@
       <ul id="move-list"></ul>
     </div>
     <div class="controls">
+      <div class="difficulty-controls" aria-label="Difficulty selection">
+        <p>Choose difficulty (change between games)</p>
+        <div class="difficulty-buttons" role="group" aria-label="Select difficulty">
+          <button class="button secondary difficulty-button" data-difficulty="easy" type="button">Easy</button>
+          <button class="button secondary difficulty-button" data-difficulty="medium" type="button">Medium</button>
+          <button class="button secondary difficulty-button" data-difficulty="hard" type="button">Hard</button>
+        </div>
+      </div>
       <button class="button play-again" id="reset">Play Again</button>
       <button class="button secondary" id="reset-score">Reset Score</button>
       <button class="button secondary" id="sound-toggle" aria-pressed="true">Sound: On</button>
@@ -422,6 +494,9 @@
     const gameStateElement = document.getElementById("game-state");
     const moveListElement = document.getElementById("move-list");
     const soundToggleButton = document.getElementById("sound-toggle");
+    const difficultyIndicator = document.getElementById("difficulty-indicator");
+    const difficultyLabel = document.getElementById("difficulty-label");
+    const difficultyButtons = Array.from(document.querySelectorAll(".difficulty-button"));
 
     let board = Array(9).fill(EMPTY);
     let currentPlayer = PLAYER;
@@ -430,6 +505,7 @@
     let winningLine = null;
     let moveHistory = [];
     let soundEnabled = true;
+    let difficulty = "medium";
     // Session-only score tracking (persists across games in the same tab).
     const SCORE_KEY = "tictactoeScores";
     let scores = {
@@ -448,6 +524,12 @@
       [0, 4, 8],
       [2, 4, 6]
     ];
+
+    const difficultyMeta = {
+      easy: { label: "Easy", color: "#7c9aff" },
+      medium: { label: "Medium", color: "#2f5fe8" },
+      hard: { label: "Hard", color: "#1b6ef3" }
+    };
 
     function renderBoard() {
       boardElement.innerHTML = "";
@@ -471,6 +553,47 @@
       statusElement.textContent = message;
       statusElement.classList.toggle("message-win", isWin);
       statusElement.classList.toggle("thinking", isThinking);
+    }
+
+    function getDifficultyLabel() {
+      return difficultyMeta[difficulty]?.label ?? "Medium";
+    }
+
+    function updateDifficultyIndicator() {
+      const label = getDifficultyLabel();
+      difficultyLabel.textContent = `Difficulty: ${label}`;
+      const color = difficultyMeta[difficulty]?.color ?? "#2f5fe8";
+      difficultyIndicator.style.color = color;
+      difficultyIndicator.querySelector(".dot").style.background = color;
+    }
+
+    function updateDifficultyControls() {
+      const canChange = gameOver || moveHistory.length === 0;
+      difficultyButtons.forEach(button => {
+        const isActive = button.dataset.difficulty === difficulty;
+        button.classList.toggle("active", isActive);
+        button.disabled = !canChange;
+        button.setAttribute("aria-pressed", String(isActive));
+      });
+    }
+
+    function getPlayerTurnMessage() {
+      return `Your turn (${getDifficultyLabel()}): place an X.`;
+    }
+
+    function getComputerThinkingMessage() {
+      return `Computer (${getDifficultyLabel()}) is thinking...`;
+    }
+
+    function getWinMessage(winner) {
+      const label = getDifficultyLabel();
+      if (winner === "player") {
+        return `You win on ${label}!`;
+      }
+      if (winner === "computer") {
+        return `Computer wins on ${label}.`;
+      }
+      return `It\'s a draw on ${label}.`;
     }
 
     function updateTurnIndicator() {
@@ -554,6 +677,29 @@
         .filter(index => index !== null);
     }
 
+    function getRandomMove(state) {
+      const availableMoves = getAvailableMoves(state);
+      if (availableMoves.length === 0) {
+        return null;
+      }
+      const randomIndex = Math.floor(Math.random() * availableMoves.length);
+      return availableMoves[randomIndex];
+    }
+
+    function getComputerMove(state) {
+      if (difficulty === "easy") {
+        return getRandomMove(state);
+      }
+      if (difficulty === "medium") {
+        const useMinimax = Math.random() >= 0.5;
+        if (!useMinimax) {
+          return getRandomMove(state);
+        }
+      }
+      const { move } = minimax([...state], true);
+      return move ?? getRandomMove(state);
+    }
+
     function minimax(state, isMaximizing) {
       if (checkWin(state, COMPUTER)) {
         return { score: 1 };
@@ -594,6 +740,7 @@
       updateStatus(message, isWin, false);
       updateTurnIndicator();
       updateGameState();
+      updateDifficultyControls();
       if (result === "player") {
         scores.player += 1;
       } else if (result === "computer") {
@@ -621,21 +768,22 @@
 
       if (winningLine) {
         renderBoard();
-        finishGame("You win!", { isWin: true, result: "player" });
+        finishGame(getWinMessage("player"), { isWin: true, result: "player" });
         return;
       }
 
       if (checkDraw(board)) {
         renderBoard();
-        finishGame("It\'s a draw.", { result: "draw" });
+        finishGame(getWinMessage("draw"), { result: "draw" });
         return;
       }
 
       currentPlayer = COMPUTER;
       renderBoard();
-      updateStatus("Computer is thinking...", false, true);
+      updateStatus(getComputerThinkingMessage(), false, true);
       updateTurnIndicator();
       updateGameState();
+      updateDifficultyControls();
       aiTimeoutId = setTimeout(() => {
         aiTimeoutId = null;
         handleComputerMove();
@@ -647,10 +795,9 @@
         return;
       }
 
-      const { move } = minimax([...board], true);
-      const selectedMove = move ?? getAvailableMoves(board)[0];
-      if (selectedMove === undefined) {
-        finishGame("It\'s a draw.", { result: "draw" });
+      const selectedMove = getComputerMove(board);
+      if (selectedMove === undefined || selectedMove === null) {
+        finishGame(getWinMessage("draw"), { result: "draw" });
         return;
       }
 
@@ -659,21 +806,22 @@
       addMoveHistory(COMPUTER, selectedMove);
       if (winningLine) {
         renderBoard();
-        finishGame("Computer wins.", { isWin: true, result: "computer" });
+        finishGame(getWinMessage("computer"), { isWin: true, result: "computer" });
         return;
       }
 
       if (checkDraw(board)) {
         renderBoard();
-        finishGame("It\'s a draw.", { result: "draw" });
+        finishGame(getWinMessage("draw"), { result: "draw" });
         return;
       }
 
       currentPlayer = PLAYER;
       renderBoard();
-      updateStatus("Your turn: place an X.");
+      updateStatus(getPlayerTurnMessage());
       updateTurnIndicator();
       updateGameState();
+      updateDifficultyControls();
     }
 
     function resetGame() {
@@ -688,11 +836,12 @@
       moveHistory = [];
       gameElement.classList.remove("over");
       gameElement.classList.remove("win");
-      updateStatus("Your turn: place an X.");
+      updateStatus(getPlayerTurnMessage());
       renderBoard();
       updateTurnIndicator();
       updateGameState();
       renderMoveHistory();
+      updateDifficultyControls();
     }
 
     resetButton.addEventListener("click", resetGame);
@@ -708,12 +857,31 @@
       soundEnabled = !soundEnabled;
       updateSoundToggle();
     });
+    difficultyButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        const nextDifficulty = button.dataset.difficulty;
+        const canChange = gameOver || moveHistory.length === 0;
+        if (!canChange || !nextDifficulty || nextDifficulty === difficulty) {
+          return;
+        }
+        difficulty = nextDifficulty;
+        updateDifficultyIndicator();
+        updateDifficultyControls();
+        const statusMessage = gameOver
+          ? `Difficulty set to ${getDifficultyLabel()}. Start a new game when ready.`
+          : getPlayerTurnMessage();
+        updateStatus(statusMessage);
+      });
+    });
 
     loadScores();
     updateGameState();
     updateSoundToggle();
+    updateDifficultyIndicator();
+    updateDifficultyControls();
     renderBoard();
     updateTurnIndicator();
+    updateStatus(getPlayerTurnMessage());
   </script>
 </body>
 </html>

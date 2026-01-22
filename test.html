@@ -625,175 +625,162 @@
     });
 
     // Staged Opening + FIFO tests
-    runner.section('Staged Opening + FIFO');
+    runner.section('Coin Toss + Alternating Halves + FIFO');
 
-    runner.test('Opening phase starts correctly', () => {
-      const game = new GameEngine();
-      assertEquals(game.phase, game.PHASE_OPENING, 'Should start in OPENING phase');
-      assertEquals(game.plyCount, 0, 'Should start at ply 0');
-      assertEquals(game.OPENING_PLIES, 6, 'Default opening should be 6 plies');
+    runner.test('Coin toss sets starting player (X)', () => {
+      // Force X to go first
+      const game = new GameEngine({ rng: () => 0 });
+      assertEquals(game.startingPlayer, 'X', 'Starting player should be X');
+      assertEquals(game.currentPlayer, 'X', 'Current player should be X');
     });
 
-    runner.test('Opening ply 0-1: Must place on X half', () => {
-      const game = new GameEngine();
-
-      // Ply 0: X must place on X's half (indices 32-63)
-      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 0 requires X half');
-      const validInXHalf = game.isValidMove(40); // X's half
-      const invalidInOHalf = game.isValidMove(10); // O's half
-      assert(validInXHalf, 'X half should be valid for ply 0');
-      assert(!invalidInOHalf, 'O half should be invalid for ply 0');
-
-      game.applyMove(40); // X places on X's half
-
-      // Ply 1: O must also place on X's half
-      assertEquals(game.plyCount, 1, 'Should be ply 1');
-      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 1 requires X half');
-      const validInXHalf2 = game.isValidMove(45); // X's half
-      const invalidInOHalf2 = game.isValidMove(5); // O's half
-      assert(validInXHalf2, 'X half should be valid for ply 1');
-      assert(!invalidInOHalf2, 'O half should be invalid for ply 1');
+    runner.test('Coin toss sets starting player (O)', () => {
+      // Force O to go first
+      const game = new GameEngine({ rng: () => 1 });
+      assertEquals(game.startingPlayer, 'O', 'Starting player should be O');
+      assertEquals(game.currentPlayer, 'O', 'Current player should be O');
     });
 
-    runner.test('Opening ply 2-3: Must place on O half', () => {
-      const game = new GameEngine();
+    runner.test('activeHalf initializes to opponent of starting player', () => {
+      // X goes first -> O's half active (so X can place in opponent territory)
+      const game1 = new GameEngine({ rng: () => 0 });
+      assertEquals(game1.getActiveHalf(), 'O', 'Active half should be O when X starts');
 
-      game.applyMove(40); // Ply 0: X on X's half
-      game.applyMove(45); // Ply 1: O on X's half
-
-      // Ply 2: X must place on O's half (indices 0-31)
-      assertEquals(game.plyCount, 2, 'Should be ply 2');
-      assertEquals(game.getRequiredHalfForOpening(), 'O', 'Ply 2 requires O half');
-      const validInOHalf = game.isValidMove(10); // O's half
-      const invalidInXHalf = game.isValidMove(50); // X's half
-      assert(validInOHalf, 'O half should be valid for ply 2');
-      assert(!invalidInXHalf, 'X half should be invalid for ply 2');
-
-      game.applyMove(10); // X places on O's half
-
-      // Ply 3: O must also place on O's half
-      assertEquals(game.plyCount, 3, 'Should be ply 3');
-      assertEquals(game.getRequiredHalfForOpening(), 'O', 'Ply 3 requires O half');
+      // O goes first -> X's half active (so O can place in opponent territory)
+      const game2 = new GameEngine({ rng: () => 1 });
+      assertEquals(game2.getActiveHalf(), 'X', 'Active half should be X when O starts');
     });
 
-    runner.test('Opening ply 4-5: Must place on X half again', () => {
-      const game = new GameEngine();
+    runner.test('Can only place in active half', () => {
+      const game = new GameEngine({ rng: () => 0 }); // X starts, O's half active
 
-      game.applyMove(40); // Ply 0: X on X's half
-      game.applyMove(45); // Ply 1: O on X's half
-      game.applyMove(10); // Ply 2: X on O's half
-      game.applyMove(15); // Ply 3: O on O's half
+      // O's half (top, indices 0-31) should be valid
+      assert(game.isValidMove(10), 'Index 10 (O half) should be valid');
+      assert(game.isValidMove(20), 'Index 20 (O half) should be valid');
 
-      // Ply 4: X must place on X's half
-      assertEquals(game.plyCount, 4, 'Should be ply 4');
-      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 4 requires X half');
-
-      game.applyMove(50); // X on X's half
-
-      // Ply 5: O must also place on X's half
-      assertEquals(game.plyCount, 5, 'Should be ply 5');
-      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 5 requires X half');
+      // X's half (bottom, indices 32-63) should be invalid
+      assert(!game.isValidMove(40), 'Index 40 (X half) should be invalid');
+      assert(!game.isValidMove(50), 'Index 50 (X half) should be invalid');
     });
 
-    runner.test('Phase transitions to OPEN_GAME after ply 6', () => {
-      const game = new GameEngine();
+    runner.test('activeHalf toggles after each turn', () => {
+      const game = new GameEngine({ rng: () => 0 }); // X starts, O's half active
 
-      game.applyMove(40); // Ply 0: X on X's half
-      game.applyMove(45); // Ply 1: O on X's half
-      game.applyMove(10); // Ply 2: X on O's half
-      game.applyMove(15); // Ply 3: O on O's half
-      game.applyMove(50); // Ply 4: X on X's half
-      game.applyMove(55); // Ply 5: O on X's half
+      assertEquals(game.getActiveHalf(), 'O', 'Initial active half should be O (opponent)');
 
-      assertEquals(game.phase, game.PHASE_OPEN_GAME, 'Should transition to OPEN_GAME after ply 5');
-      assertEquals(game.plyCount, 6, 'Should be ply 6');
-      assertEquals(game.countPlayerPieces('X'), 3, 'X should have 3 pieces');
-      assertEquals(game.countPlayerPieces('O'), 3, 'O should have 3 pieces');
+      // Turn 1: X places in O's half
+      game.applyMove(10);
+      assertEquals(game.getActiveHalf(), 'X', 'Active half should toggle to X');
+      assertEquals(game.currentPlayer, 'O', 'Current player should be O');
 
-      // Now can place anywhere
-      const anywhereValid1 = game.isValidMove(0); // O's half
-      const anywhereValid2 = game.isValidMove(32); // X's half
-      assert(anywhereValid1 && anywhereValid2, 'Can place anywhere in OPEN_GAME');
+      // Turn 2: O places in X's half
+      game.applyMove(40);
+      assertEquals(game.getActiveHalf(), 'O', 'Active half should toggle back to O');
+      assertEquals(game.currentPlayer, 'X', 'Current player should be X');
+
+      // Turn 3: X places in O's half
+      game.applyMove(15);
+      assertEquals(game.getActiveHalf(), 'X', 'Active half should toggle to X again');
+      assertEquals(game.currentPlayer, 'O', 'Current player should be O');
     });
 
-    runner.test('FIFO removal triggers when placing 9th piece', () => {
-      const game = new GameEngine({ maxOnBoard: 3 });
+    runner.test('Legal moves filtered to active half only', () => {
+      const game = new GameEngine({ rng: () => 0 }); // X starts, O's half active
 
-      // Complete opening (3 pieces each)
-      game.applyMove(40); // X
-      game.applyMove(45); // O
-      game.applyMove(10); // X
-      game.applyMove(15); // O
-      game.applyMove(50); // X
-      game.applyMove(55); // O
+      const validMoves = game.getValidMoves();
 
-      // X has 3 pieces (ply 0, 2, 4): indices 40, 10, 50
-      // X places 4th piece -> should FIFO remove ply 0 (index 40)
-      const result = game.applyMove(20); // X places 4th
+      // All valid moves should be in O's half (indices 0-31)
+      validMoves.forEach(index => {
+        assert(game.isInOHalf(index), `Valid move ${index} should be in O's half`);
+      });
+
+      // Place move and toggle to X's half
+      game.applyMove(10);
+
+      const validMovesX = game.getValidMoves();
+
+      // All valid moves should now be in X's half (indices 32-63)
+      validMovesX.forEach(index => {
+        assert(game.isInXHalf(index), `Valid move ${index} should be in X's half`);
+      });
+    });
+
+    runner.test('FIFO removal triggers when placing 4th piece (cap=3)', () => {
+      const game = new GameEngine({ maxOnBoard: 3, rng: () => 0 }); // X starts, O's half active
+
+      // Turn 1: X places in O's half (activeHalf toggles to X)
+      game.applyMove(10); // X, ply 0
+      // Turn 2: O places in X's half (activeHalf toggles to O)
+      game.applyMove(40); // O, ply 1
+      // Turn 3: X places in O's half (activeHalf toggles to X)
+      game.applyMove(15); // X, ply 2
+      // Turn 4: O places in X's half (activeHalf toggles to O)
+      game.applyMove(45); // O, ply 3
+      // Turn 5: X places in O's half (activeHalf toggles to X)
+      game.applyMove(20); // X, ply 4
+      // Turn 6: O places in X's half (activeHalf toggles to O)
+      game.applyMove(50); // O, ply 5
+
+      // X has 3 pieces (ply 0, 2, 4): indices 10, 15, 20
+      // X places 4th piece in O's half -> should FIFO remove ply 0 (index 10)
+      const result = game.applyMove(25); // X places 4th, ply 6
 
       assert(result.success, 'Move should succeed');
-      assertEquals(result.fifoRemoved, 40, 'Should remove oldest piece (index 40)');
-      assertEquals(game.board[40], game.EMPTY, 'Oldest piece should be removed');
-      assertEquals(game.board[20], 'X', 'New piece should be placed');
+      assertEquals(result.fifoRemoved, 10, 'Should remove oldest piece (index 10)');
+      assertEquals(game.board[10], game.EMPTY, 'Oldest piece should be removed');
+      assertEquals(game.board[25], 'X', 'New piece should be placed');
       assertEquals(game.countPlayerPieces('X'), 3, 'X should still have 3 pieces after FIFO');
     });
 
     runner.test('FIFO removes oldest by plyIndex', () => {
-      const game = new GameEngine({ maxOnBoard: 8 });
+      const game = new GameEngine({ maxOnBoard: 8, rng: () => 0 }); // X starts, O's half active
 
-      // Complete opening
-      game.applyMove(40); // X, ply 0
-      game.applyMove(45); // O, ply 1
-      game.applyMove(10); // X, ply 2
-      game.applyMove(15); // O, ply 3
-      game.applyMove(50); // X, ply 4
-      game.applyMove(55); // O, ply 5
+      // Alternating turns, active half alternates
+      game.applyMove(10); // X in O's half, ply 0
+      game.applyMove(40); // O in X's half, ply 1
+      game.applyMove(15); // X in O's half, ply 2
+      game.applyMove(45); // O in X's half, ply 3
+      game.applyMove(20); // X in O's half, ply 4
+      game.applyMove(50); // O in X's half, ply 5
 
-      // X places 5 more to reach 8 (indices: 40, 10, 50, then 20, 21, 22, 23, 24)
-      game.applyMove(20); // X, ply 6
-      game.applyMove(25); // O, ply 7
-      game.applyMove(21); // X, ply 8
-      game.applyMove(26); // O, ply 9
-      game.applyMove(22); // X, ply 10
-      game.applyMove(27); // O, ply 11
-      game.applyMove(23); // X, ply 12
-      game.applyMove(28); // O, ply 13
-      game.applyMove(24); // X, ply 14 (8th piece)
+      // X places 5 more to reach 8
+      game.applyMove(25); // X, ply 6 (4th piece)
+      game.applyMove(55); // O, ply 7
+      game.applyMove(11); // X, ply 8 (5th piece)
+      game.applyMove(41); // O, ply 9
+      game.applyMove(16); // X, ply 10 (6th piece)
+      game.applyMove(46); // O, ply 11
+      game.applyMove(21); // X, ply 12 (7th piece)
+      game.applyMove(51); // O, ply 13
+      game.applyMove(26); // X, ply 14 (8th piece)
 
-      // X places 9th -> should remove oldest (ply 0, index 40)
-      const result = game.applyMove(30); // X, ply 16
-      assertEquals(result.fifoRemoved, 40, 'Should remove ply 0 piece (oldest)');
+      assertEquals(game.countPlayerPieces('X'), 8, 'X should have 8 pieces');
+
+      // X places 9th -> should remove oldest (ply 0, index 10)
+      game.applyMove(56); // O, ply 15
+      const result = game.applyMove(12); // X, ply 16 (9th piece)
+      assertEquals(result.fifoRemoved, 10, 'Should remove ply 0 piece (oldest)');
     });
 
-    runner.test('Win detection occurs after FIFO removal', () => {
-      const game = new GameEngine({ maxOnBoard: 4 });
+    runner.test('Win detection works with alternating halves', () => {
+      const game = new GameEngine({ rng: () => 0 }); // X starts, O's half active
 
-      // Complete opening
-      game.applyMove(40); // X, ply 0
-      game.applyMove(45); // O, ply 1
-      game.applyMove(0);  // X, ply 2 - start of potential win line
-      game.applyMove(15); // O, ply 3
-      game.applyMove(50); // X, ply 4
-      game.applyMove(55); // O, ply 5
+      // With corrected rules: X starts, O's half active
+      // X places in O's half (where X needs to win)
+      // O places in X's half (where O needs to win)
 
-      // X builds 4-in-a-row in O's half: 0,1,2,3
-      game.applyMove(1);  // X, ply 6
-      game.applyMove(16); // O, ply 7
-      game.applyMove(2);  // X, ply 8 (4th piece, at cap)
-      game.applyMove(17); // O, ply 9
+      // X builds 4-in-a-row in O's half (top, indices 0-7 is first row)
+      game.applyMove(0);  // X in O's half, ply 0
+      game.applyMove(32); // O in X's half, ply 1
+      game.applyMove(1);  // X in O's half, ply 2
+      game.applyMove(33); // O in X's half, ply 3
+      game.applyMove(2);  // X in O's half, ply 4
+      game.applyMove(34); // O in X's half, ply 5
+      game.applyMove(3);  // X in O's half, ply 6 - X has 0,1,2,3 (4-in-a-row)!
 
-      // X places 5th piece to exceed cap and complete win
-      // X has pieces at: 40, 0, 50, 1, 2 (cap is 4, so oldest 40 will be removed)
-      // After FIFO, X has: 0, 50, 1, 2 - no 4-in-a-row yet
-      game.applyMove(3);  // X, ply 10 - completes 0,1,2,3 but also exceeds cap
-
-      // FIFO removes oldest (ply 0, index 40)
-      // After removal: X has 0, 1, 2, 3 (4 pieces) - this IS a 4-in-a-row!
-      const result = game.applyMove(3);
-      assertEquals(result.fifoRemoved, 40, 'Should FIFO remove index 40');
-      assert(result.gameOver, 'Game should be over after FIFO - 4 in a row');
-      assertEquals(result.winner, 'X', 'X should win');
-      assertArrayEquals(result.winningLine, [0, 1, 2, 3], 'Winning line should be 0,1,2,3');
+      assert(game.gameOver, 'Game should be over');
+      assertEquals(game.winner, 'X', 'X should win');
+      assertArrayEquals(game.winningLine, [0, 1, 2, 3], 'Winning line should be 0,1,2,3');
     });
 
     runner.test('FIFO preview identifies correct piece', () => {

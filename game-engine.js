@@ -1,19 +1,23 @@
 /**
  * Checkerboard Tic-Tac-Toe Game Engine
  *
- * Rules (Staged Opening + FIFO):
+ * Rules (Coin Toss + Alternating Halves + FIFO):
  * - 8x8 board
  * - Two players: X and O
  * - Win condition: 4-in-a-row entirely in opponent's half
  *
- * STAGED OPENING PHASE (6 plies):
- * - Round 1 (plies 1-2): Both players place on X's half
- * - Round 2 (plies 3-4): Both players place on O's half
- * - Round 3 (plies 5-6): Both players place on X's half
- * - After opening: 3 pieces per player on board
+ * COIN TOSS:
+ * - At game start, randomly determine which player goes first
+ * - Display coin toss result to user
  *
- * OPEN GAME PHASE (after ply 6):
- * - Place anywhere on empty squares
+ * ALTERNATING ACTIVE HALF:
+ * - Only one half is playable at a time (the "active half")
+ * - Active half starts as the starting player's side
+ * - After each turn (placement + FIFO resolution), active half toggles
+ * - Players can only place pieces in the currently active half
+ * - Inactive half is grayed out and non-interactive
+ *
+ * FIFO CAP:
  * - MAX_ON_BOARD_PER_PLAYER = 8 (default, configurable)
  * - FIFO removal: When placing 9th piece, automatically remove oldest piece
  *
@@ -31,13 +35,12 @@ class GameEngine {
     this.PLAYER_X = "X";
     this.PLAYER_O = "O";
 
-    // Game phases
-    this.PHASE_OPENING = "OPENING";
-    this.PHASE_OPEN_GAME = "OPEN_GAME";
-
     // Configuration
     this.MAX_ON_BOARD_PER_PLAYER = config.maxOnBoard || 8;
-    this.OPENING_PLIES = config.openingPlies || 6;
+
+    // RNG for coin toss (injectable for testing)
+    // Returns 0 or 1 for determining starting player
+    this.rng = config.rng || (() => Math.floor(Math.random() * 2));
 
     // Row indices that define the boundary
     // Rows 0-3 (indices 0-31) = O's half (top)
@@ -49,18 +52,25 @@ class GameEngine {
 
   /**
    * Reset the game to initial state
+   * Performs coin toss to determine starting player
    */
   reset() {
     this.board = Array(this.CELLS_COUNT).fill(this.EMPTY);
-    this.currentPlayer = this.PLAYER_X;
     this.gameOver = false;
     this.winner = null;
     this.winningLine = null;
     this.moveHistory = [];
+    this.plyCount = 0;
 
-    // Phase tracking
-    this.phase = this.PHASE_OPENING;
-    this.plyCount = 0; // 0-based: 0-5 = opening, 6+ = open game
+    // Coin toss: randomly determine starting player
+    const coinToss = this.rng();
+    this.startingPlayer = coinToss === 0 ? this.PLAYER_X : this.PLAYER_O;
+    this.currentPlayer = this.startingPlayer;
+
+    // Active half: starts as OPPONENT's side (where starting player needs to win)
+    // activeHalf ∈ {'X', 'O'} indicates which half is currently playable
+    // This ensures starting player can build in enemy territory
+    this.activeHalf = this.startingPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
 
     // FIFO tracking
     // pieceData[index] = { player, plyIndex } or null
@@ -122,26 +132,11 @@ class GameEngine {
   }
 
   /**
-   * Get required half for current ply during opening
-   * Returns 'X' or 'O' for which half is required
+   * Get which half is currently active (playable)
+   * Returns 'X' or 'O'
    */
-  getRequiredHalfForOpening() {
-    if (this.phase !== this.PHASE_OPENING) {
-      return null;
-    }
-
-    // Opening pattern:
-    // Ply 0-1 (Round 1): X's half
-    // Ply 2-3 (Round 2): O's half
-    // Ply 4-5 (Round 3): X's half
-    if (this.plyCount <= 1) {
-      return 'X';
-    } else if (this.plyCount <= 3) {
-      return 'O';
-    } else if (this.plyCount <= 5) {
-      return 'X';
-    }
-    return null;
+  getActiveHalf() {
+    return this.activeHalf;
   }
 
   /**
@@ -335,18 +330,14 @@ class GameEngine {
       return false;
     }
 
-    // Opening phase restrictions
-    if (this.phase === this.PHASE_OPENING) {
-      const requiredHalf = this.getRequiredHalfForOpening();
-      if (requiredHalf === 'X' && !this.isInXHalf(index)) {
-        return false;
-      }
-      if (requiredHalf === 'O' && !this.isInOHalf(index)) {
-        return false;
-      }
+    // Active half restriction: can only place in currently active half
+    if (this.activeHalf === 'X' && !this.isInXHalf(index)) {
+      return false;
+    }
+    if (this.activeHalf === 'O' && !this.isInOHalf(index)) {
+      return false;
     }
 
-    // Open game: anywhere is fine
     return true;
   }
 
@@ -398,39 +389,32 @@ class GameEngine {
       row: coords.row,
       col: coords.col,
       ply: this.plyCount,
-      phase: this.phase
+      activeHalf: this.activeHalf
     });
 
     this.plyCount++;
 
-    // Update phase if opening just completed
-    if (this.phase === this.PHASE_OPENING && this.plyCount >= this.OPENING_PLIES) {
-      this.phase = this.PHASE_OPEN_GAME;
-    }
-
-    // 2. FIFO removal (Open Game phase only)
+    // 2. FIFO removal (when player exceeds cap)
     let removedIndex = null;
-    if (this.phase === this.PHASE_OPEN_GAME) {
-      const pieceCount = this.countPlayerPieces(this.currentPlayer);
-      if (pieceCount > this.MAX_ON_BOARD_PER_PLAYER) {
-        removedIndex = this.findOldestPiece(this.currentPlayer);
-        if (removedIndex !== null) {
-          const removedCoords = this.indexToCoords(removedIndex);
+    const pieceCount = this.countPlayerPieces(this.currentPlayer);
+    if (pieceCount > this.MAX_ON_BOARD_PER_PLAYER) {
+      removedIndex = this.findOldestPiece(this.currentPlayer);
+      if (removedIndex !== null) {
+        const removedCoords = this.indexToCoords(removedIndex);
 
-          // Remove the piece
-          this.board[removedIndex] = this.EMPTY;
-          this.pieceData[removedIndex] = null;
+        // Remove the piece
+        this.board[removedIndex] = this.EMPTY;
+        this.pieceData[removedIndex] = null;
 
-          // Record removal in history
-          this.moveHistory.push({
-            type: 'fifo_removal',
-            player: this.currentPlayer,
-            index: removedIndex,
-            row: removedCoords.row,
-            col: removedCoords.col,
-            ply: this.plyCount - 1
-          });
-        }
+        // Record removal in history
+        this.moveHistory.push({
+          type: 'fifo_removal',
+          player: this.currentPlayer,
+          index: removedIndex,
+          row: removedCoords.row,
+          col: removedCoords.col,
+          ply: this.plyCount - 1
+        });
       }
     }
 
@@ -454,7 +438,7 @@ class GameEngine {
         winner: this.currentPlayer,
         winningLine: winResult.line,
         fifoRemoved: removedIndex !== null ? removedIndex : null,
-        phase: this.phase,
+        activeHalf: this.activeHalf,
         plyCount: this.plyCount
       };
     }
@@ -467,19 +451,23 @@ class GameEngine {
         message: "Draw!",
         gameOver: true,
         winner: null,
-        fifoRemoved: removedIndex !== null ? removedIndex : null
+        fifoRemoved: removedIndex !== null ? removedIndex : null,
+        activeHalf: this.activeHalf
       };
     }
 
     // 4. Switch players
     this.currentPlayer = this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
 
+    // 5. Toggle active half (alternates every turn)
+    this.activeHalf = this.activeHalf === 'X' ? 'O' : 'X';
+
     return {
       success: true,
       message: "Move applied",
       gameOver: false,
       fifoRemoved: removedIndex !== null ? removedIndex : null,
-      phase: this.phase,
+      activeHalf: this.activeHalf,
       plyCount: this.plyCount
     };
   }

@@ -52,9 +52,28 @@ Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your oppon
 - A 4-in-a-row that crosses the boundary does **not** count as a win
 - A 4-in-a-row in your own territory does **not** count as a win
 
+### Invasion Cap (NEW!)
+The game now enforces an **invasion cap** limiting how many of your pieces can exist on the opponent's half at once:
+
+- **Default cap**: 8 pieces (configurable)
+- **Placement restriction**: You can place pieces anywhere on the board, but if you exceed the cap on opponent territory, you must immediately remove one of your pieces from that territory
+- **Turn order when cap exceeded**:
+  1. Place your piece
+  2. Select one of your pieces on opponent's half to remove (cannot remove the just-placed piece)
+  3. Win condition is checked after removal
+- **Visual indicator**: The UI displays your current invasion count (e.g., "Invasion: 5/8") with warning colors when approaching or exceeding the cap
+- **Strategic consideration**: Balance between infiltrating enemy territory and maintaining your invasion capacity
+
+**Example scenario:**
+- You have 8 pieces on opponent's half (at cap: 8/8)
+- You place a 9th piece there (exceeds cap: 9/8)
+- You must immediately select one of your OTHER pieces on opponent's half to remove
+- After removal, you're back to 8/8 and your turn ends
+
 ### Gameplay
 - Players alternate turns placing their piece (X or O) on any empty square
-- After each move, the game checks for a valid win condition
+- If invasion cap is exceeded, player must select a piece to remove before turn ends
+- After each completed turn, the game checks for a valid win condition
 - The game ends when a player achieves a valid 4-in-a-row or the board is full (draw)
 
 ## 🚀 How to Play
@@ -106,8 +125,11 @@ The project follows a clean separation of concerns:
 - **Pure logic** with no DOM/UI dependencies
 - Deterministic and fully testable
 - Key methods:
-  - `applyMove(index)`: Apply a move and check win conditions
+  - `applyMove(index)`: Apply a move and check win conditions (handles invasion cap)
+  - `removePiece(index)`: Remove a piece when invasion cap is exceeded
   - `checkWin(player)`: Validate 4-in-a-row with territory constraint
+  - `isInOpponentHalf(index, player)`: Check if position is in opponent territory
+  - `countPiecesOnOpponentHalf(player)`: Count pieces in opponent territory
   - `getValidMoves()`: Get all available positions
   - `reset()`: Start a new game
   - `getState()`/`loadState()`: Save/restore game state
@@ -137,6 +159,17 @@ The test suite validates:
 ❌ **Wins crossing the boundary** (correctly rejected)
 ❌ **3-in-a-row** without 4th piece (no false positives)
 ❌ **Disconnected pieces** (gaps in the line)
+
+**Invasion Cap Tests:**
+✅ **Invasion counting** increments correctly on opponent territory placement
+✅ **Cap threshold** triggers removal requirement when exceeded
+✅ **Piece removal** reduces invasion count correctly
+✅ **Removal restrictions**: Cannot remove pieces from home territory
+✅ **Removal restrictions**: Cannot remove the just-placed piece
+✅ **Win detection** works correctly after removal completes turn
+✅ **Movement blocking** during pending removal state
+✅ **Configurable cap** values (default: 8)
+✅ **Independent tracking** per player
 
 ## 🔮 Future Enhancements
 

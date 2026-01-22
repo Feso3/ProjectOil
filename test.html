@@ -1288,6 +1288,132 @@
       assertArrayEquals(oFifo1, oFifo2, 'O FIFO order should be deterministic');
     });
 
+    // ============================================================
+    // FIFO WARNINGS GATING TESTS (per-player flag)
+    // ============================================================
+
+    runner.section('FIFO Warnings Gating Tests');
+
+    runner.test('FIFO warnings disabled before player reaches cap', () => {
+      const game = new GameEngine();
+
+      // Initially disabled for both players
+      assertEquals(game.isFifoWarningsEnabled('X'), false, 'X warnings should be disabled initially');
+      assertEquals(game.isFifoWarningsEnabled('O'), false, 'O warnings should be disabled initially');
+
+      // Complete opening (3 pieces each) - still below cap
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Both players have 3 pieces, below cap (8), warnings still disabled
+      assertEquals(game.isFifoWarningsEnabled('X'), false, 'X warnings should be disabled below cap');
+      assertEquals(game.isFifoWarningsEnabled('O'), false, 'O warnings should be disabled below cap');
+
+      // Add more pieces, still below cap
+      game.applyMove(20); // X, ply 6 (4 pieces)
+      assertEquals(game.isFifoWarningsEnabled('X'), false, 'X warnings disabled at 4 pieces');
+
+      game.applyMove(25); // O, ply 7 (4 pieces)
+      assertEquals(game.isFifoWarningsEnabled('O'), false, 'O warnings disabled at 4 pieces');
+    });
+
+    runner.test('FIFO warnings enabled exactly when player reaches cap', () => {
+      const game = new GameEngine();
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Add pieces up to cap - 1
+      game.applyMove(20); // X, ply 6 (4 pieces)
+      game.applyMove(25); // O, ply 7 (4 pieces)
+      game.applyMove(30); // X, ply 8 (5 pieces)
+      game.applyMove(35); // O, ply 9 (5 pieces)
+      game.applyMove(41); // X, ply 10 (6 pieces)
+      game.applyMove(46); // O, ply 11 (6 pieces)
+      game.applyMove(11); // X, ply 12 (7 pieces)
+      game.applyMove(16); // O, ply 13 (7 pieces)
+
+      // Both have 7 pieces, still disabled
+      assertEquals(game.isFifoWarningsEnabled('X'), false, 'X warnings disabled at 7 pieces');
+      assertEquals(game.isFifoWarningsEnabled('O'), false, 'O warnings disabled at 7 pieces');
+
+      // X reaches cap (8 pieces)
+      game.applyMove(51); // X, ply 14 (8 pieces)
+      assertEquals(game.isFifoWarningsEnabled('X'), true, 'X warnings enabled at 8 pieces');
+      assertEquals(game.isFifoWarningsEnabled('O'), false, 'O warnings still disabled');
+
+      // O reaches cap (8 pieces)
+      game.applyMove(56); // O, ply 15 (8 pieces)
+      assertEquals(game.isFifoWarningsEnabled('O'), true, 'O warnings enabled at 8 pieces');
+    });
+
+    runner.test('FIFO warnings remain enabled after FIFO removals', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // Complete opening (3 pieces each, at cap)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Both at cap, warnings enabled
+      assertEquals(game.isFifoWarningsEnabled('X'), true, 'X warnings enabled at cap');
+      assertEquals(game.isFifoWarningsEnabled('O'), true, 'O warnings enabled at cap');
+
+      // X places 4th piece, triggers FIFO removal (back to 3 pieces)
+      game.applyMove(20); // X, ply 6 (triggers FIFO)
+      assertEquals(game.countPlayerPieces('X'), 3, 'X should have 3 pieces after FIFO');
+      assertEquals(game.isFifoWarningsEnabled('X'), true, 'X warnings still enabled after FIFO');
+
+      // O places 4th piece, triggers FIFO removal (back to 3 pieces)
+      game.applyMove(25); // O, ply 7 (triggers FIFO)
+      assertEquals(game.countPlayerPieces('O'), 3, 'O should have 3 pieces after FIFO');
+      assertEquals(game.isFifoWarningsEnabled('O'), true, 'O warnings still enabled after FIFO');
+    });
+
+    runner.test('FIFO warnings per-player independence', () => {
+      const game = new GameEngine();
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Add pieces for X up to cap
+      game.applyMove(20); // X, ply 6 (4 pieces)
+      game.applyMove(25); // O, ply 7 (4 pieces)
+      game.applyMove(30); // X, ply 8 (5 pieces)
+      game.applyMove(35); // O, ply 9 (5 pieces)
+      game.applyMove(41); // X, ply 10 (6 pieces)
+      game.applyMove(46); // O, ply 11 (6 pieces)
+      game.applyMove(11); // X, ply 12 (7 pieces)
+      game.applyMove(26); // O, ply 13 (7 pieces)
+      game.applyMove(51); // X, ply 14 (8 pieces - reaches cap!)
+
+      // Only X should have warnings enabled
+      assertEquals(game.isFifoWarningsEnabled('X'), true, 'X warnings enabled');
+      assertEquals(game.isFifoWarningsEnabled('O'), false, 'O warnings still disabled');
+      assertEquals(game.countPlayerPieces('O'), 7, 'O should have 7 pieces');
+
+      // Continue without O reaching cap
+      game.applyMove(36); // O, ply 15 (8 pieces - O reaches cap!)
+      assertEquals(game.isFifoWarningsEnabled('O'), true, 'O warnings now enabled');
+    });
+
     // Run all tests
     runner.run();
   </script>

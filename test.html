@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Engine Tests</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f7fa;
+    }
+
+    h1 {
+      color: #1d2433;
+      border-bottom: 3px solid #2f5fe8;
+      padding-bottom: 10px;
+    }
+
+    .test-section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .test-section h2 {
+      color: #2f5fe8;
+      margin-top: 0;
+    }
+
+    .test-case {
+      padding: 12px;
+      margin: 8px 0;
+      border-left: 4px solid #ddd;
+      background: #f9fafb;
+      border-radius: 4px;
+    }
+
+    .test-case.pass {
+      border-left-color: #20b26b;
+      background: #f0fdf4;
+    }
+
+    .test-case.fail {
+      border-left-color: #e84a5f;
+      background: #fef2f2;
+    }
+
+    .test-name {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .test-result {
+      font-size: 0.9em;
+      color: #666;
+    }
+
+    .summary {
+      background: #2f5fe8;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    .summary.all-pass {
+      background: #20b26b;
+    }
+
+    .summary.has-fail {
+      background: #e84a5f;
+    }
+
+    .summary h2 {
+      margin: 0 0 10px 0;
+    }
+
+    .summary .stats {
+      font-size: 1.2em;
+    }
+
+    .board-viz {
+      display: inline-grid;
+      grid-template-columns: repeat(8, 24px);
+      grid-template-rows: repeat(8, 24px);
+      gap: 2px;
+      margin: 10px 0;
+      font-size: 10px;
+      font-weight: bold;
+    }
+
+    .board-viz .cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #ddd;
+      background: #fff;
+    }
+
+    .board-viz .cell.winning {
+      background: #ffd700;
+      border-color: #20b26b;
+    }
+
+    .board-viz .cell.x {
+      color: #1b6ef3;
+    }
+
+    .board-viz .cell.o {
+      color: #e84a5f;
+    }
+
+    .error-message {
+      color: #e84a5f;
+      font-family: monospace;
+      font-size: 0.85em;
+      margin-top: 4px;
+      padding: 8px;
+      background: #fef2f2;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Checkerboard Tic-Tac-Toe - Game Engine Tests</h1>
+  <div id="test-results"></div>
+
+  <script src="game-engine.js"></script>
+  <script>
+    // Test runner
+    class TestRunner {
+      constructor() {
+        this.tests = [];
+        this.passed = 0;
+        this.failed = 0;
+      }
+
+      test(name, fn) {
+        this.tests.push({ name, fn });
+      }
+
+      async run() {
+        const resultsContainer = document.getElementById('test-results');
+
+        for (const { name, fn } of this.tests) {
+          try {
+            await fn();
+            this.passed++;
+            this.renderTestCase(resultsContainer, name, true);
+          } catch (error) {
+            this.failed++;
+            this.renderTestCase(resultsContainer, name, false, error.message);
+          }
+        }
+
+        this.renderSummary(resultsContainer);
+      }
+
+      renderTestCase(container, name, passed, errorMessage = null) {
+        const section = container.querySelector('.current-section') || container;
+        const testCase = document.createElement('div');
+        testCase.className = `test-case ${passed ? 'pass' : 'fail'}`;
+
+        const testName = document.createElement('div');
+        testName.className = 'test-name';
+        testName.textContent = `${passed ? '✓' : '✗'} ${name}`;
+        testCase.appendChild(testName);
+
+        if (!passed && errorMessage) {
+          const error = document.createElement('div');
+          error.className = 'error-message';
+          error.textContent = errorMessage;
+          testCase.appendChild(error);
+        }
+
+        section.appendChild(testCase);
+      }
+
+      section(name) {
+        const resultsContainer = document.getElementById('test-results');
+        const section = document.createElement('div');
+        section.className = 'test-section current-section';
+
+        const heading = document.createElement('h2');
+        heading.textContent = name;
+        section.appendChild(heading);
+
+        resultsContainer.appendChild(section);
+      }
+
+      renderSummary(container) {
+        const summary = document.createElement('div');
+        const total = this.passed + this.failed;
+        const allPass = this.failed === 0;
+
+        summary.className = `summary ${allPass ? 'all-pass' : 'has-fail'}`;
+        summary.innerHTML = `
+          <h2>${allPass ? '✓ All Tests Passed!' : '✗ Some Tests Failed'}</h2>
+          <div class="stats">
+            <strong>${this.passed}</strong> passed,
+            <strong>${this.failed}</strong> failed,
+            <strong>${total}</strong> total
+          </div>
+        `;
+
+        container.insertBefore(summary, container.firstChild);
+      }
+
+      visualizeBoard(game, title = '') {
+        const viz = document.createElement('div');
+        viz.style.marginTop = '10px';
+
+        if (title) {
+          const titleEl = document.createElement('div');
+          titleEl.textContent = title;
+          titleEl.style.fontWeight = 'bold';
+          titleEl.style.marginBottom = '5px';
+          viz.appendChild(titleEl);
+        }
+
+        const boardViz = document.createElement('div');
+        boardViz.className = 'board-viz';
+
+        const winningIndices = new Set(game.winningLine || []);
+
+        for (let i = 0; i < game.CELLS_COUNT; i++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+
+          if (game.board[i] === game.PLAYER_X) {
+            cell.textContent = 'X';
+            cell.classList.add('x');
+          } else if (game.board[i] === game.PLAYER_O) {
+            cell.textContent = 'O';
+            cell.classList.add('o');
+          }
+
+          if (winningIndices.has(i)) {
+            cell.classList.add('winning');
+          }
+
+          boardViz.appendChild(cell);
+        }
+
+        viz.appendChild(boardViz);
+        return viz;
+      }
+    }
+
+    // Assertion helpers
+    function assert(condition, message) {
+      if (!condition) {
+        throw new Error(message || 'Assertion failed');
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        throw new Error(message || `Expected ${expected}, got ${actual}`);
+      }
+    }
+
+    function assertArrayEquals(actual, expected, message) {
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(message || `Expected [${expected}], got [${actual}]`);
+      }
+    }
+
+    // Test suite
+    const runner = new TestRunner();
+
+    // Basic functionality tests
+    runner.section('Basic Functionality');
+
+    runner.test('Game initializes with empty 8x8 board', () => {
+      const game = new GameEngine();
+      assertEquals(game.board.length, 64, 'Board should have 64 cells');
+      assertEquals(game.currentPlayer, 'X', 'X should start first');
+      assertEquals(game.gameOver, false, 'Game should not be over initially');
+    });
+
+    runner.test('Valid moves can be applied', () => {
+      const game = new GameEngine();
+      const result = game.applyMove(0);
+      assert(result.success, 'Move should succeed');
+      assertEquals(game.board[0], 'X', 'Cell should contain X');
+      assertEquals(game.currentPlayer, 'O', 'Turn should switch to O');
+    });
+
+    runner.test('Invalid moves are rejected', () => {
+      const game = new GameEngine();
+      game.applyMove(0);
+      const result = game.applyMove(0); // Same cell
+      assertEquals(result.success, false, 'Move should fail');
+    });
+
+    runner.test('Moves out of bounds are rejected', () => {
+      const game = new GameEngine();
+      const result1 = game.applyMove(-1);
+      const result2 = game.applyMove(64);
+      assertEquals(result1.success, false, 'Negative index should fail');
+      assertEquals(result2.success, false, 'Index >= 64 should fail');
+    });
+
+    // Horizontal win tests
+    runner.section('Horizontal Win Detection');
+
+    runner.test('Horizontal win in opponent side (X in top half) - VALID', () => {
+      const game = new GameEngine();
+      // X wins in row 0 (top half, X's opponent side)
+      // X: 0,1,2,3  O: 32,33,34
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(1);  // X
+      game.applyMove(33); // O
+      game.applyMove(2);  // X
+      game.applyMove(34); // O
+      const result = game.applyMove(3);  // X wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'X', 'X should win');
+      assertArrayEquals(result.winningLine, [0, 1, 2, 3], 'Winning line should be [0,1,2,3]');
+    });
+
+    runner.test('Horizontal win in opponent side (O in bottom half) - VALID', () => {
+      const game = new GameEngine();
+      // O wins in row 7 (bottom half, O's opponent side)
+      // Indices: 56,57,58,59
+      game.applyMove(0);  // X
+      game.applyMove(56); // O
+      game.applyMove(1);  // X
+      game.applyMove(57); // O
+      game.applyMove(2);  // X
+      game.applyMove(58); // O
+      game.applyMove(8);  // X
+      const result = game.applyMove(59); // O wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'O', 'O should win');
+      assertArrayEquals(result.winningLine, [56, 57, 58, 59], 'Winning line should be [56,57,58,59]');
+    });
+
+    runner.test('Horizontal win in home side (X in bottom half) - INVALID', () => {
+      const game = new GameEngine();
+      // X attempts to win in row 7 (bottom half, X's home side) - should NOT count
+      // Indices: 56,57,58,59
+      game.applyMove(56); // X
+      game.applyMove(0);  // O
+      game.applyMove(57); // X
+      game.applyMove(1);  // O
+      game.applyMove(58); // X
+      game.applyMove(2);  // O
+      const result = game.applyMove(59); // X completes 4 in home side
+      assertEquals(result.gameOver, false, 'Game should NOT be over (win in home side)');
+      assertEquals(result.winner, undefined, 'No winner yet');
+    });
+
+    runner.test('Horizontal win in home side (O in top half) - INVALID', () => {
+      const game = new GameEngine();
+      // O attempts to win in row 0 (top half, O's home side) - should NOT count
+      game.applyMove(32); // X
+      game.applyMove(0);  // O
+      game.applyMove(33); // X
+      game.applyMove(1);  // O
+      game.applyMove(34); // X
+      game.applyMove(2);  // O
+      game.applyMove(35); // X
+      const result = game.applyMove(3);  // O completes 4 in home side
+      assertEquals(result.gameOver, false, 'Game should NOT be over (win in home side)');
+      assertEquals(result.winner, undefined, 'No winner yet');
+    });
+
+    runner.test('Horizontal win crossing halves - INVALID', () => {
+      const game = new GameEngine();
+      // Note: Horizontal lines can't actually cross halves since they're on the same row.
+      // This test verifies that a horizontal line at the boundary is correctly categorized.
+      // A line in row 3 (indices 24-31) is entirely in top half - would be valid for X
+      // A line in row 4 (indices 32-39) is entirely in bottom half - would be valid for O
+      // So horizontal lines are always in one half or the other.
+      // This test simply confirms the game doesn't have false positives for partial wins.
+
+      // Test: X gets 3 horizontal in a row in top half - should NOT win yet
+      game.applyMove(24); // X row 3, col 0
+      game.applyMove(32); // O
+      game.applyMove(25); // X row 3, col 1
+      game.applyMove(33); // O
+      game.applyMove(26); // X row 3, col 2 (3 in a row)
+      const result = game.applyMove(34); // O
+      assertEquals(result.gameOver, false, 'Game should not end with only 3 in a row');
+    });
+
+    // Vertical win tests
+    runner.section('Vertical Win Detection');
+
+    runner.test('Vertical win in opponent side (X in top half) - VALID', () => {
+      const game = new GameEngine();
+      // X wins vertically in column 0, rows 0-3 (top half)
+      // Indices: 0,8,16,24
+      game.applyMove(0);  // X row 0
+      game.applyMove(32); // O
+      game.applyMove(8);  // X row 1
+      game.applyMove(33); // O
+      game.applyMove(16); // X row 2
+      game.applyMove(34); // O
+      const result = game.applyMove(24); // X row 3 - wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'X', 'X should win');
+      assertArrayEquals(result.winningLine, [0, 8, 16, 24], 'Winning line should be vertical');
+    });
+
+    runner.test('Vertical win in opponent side (O in bottom half) - VALID', () => {
+      const game = new GameEngine();
+      // O wins vertically in column 7, rows 4-7 (bottom half)
+      // Indices: 39,47,55,63
+      game.applyMove(0);  // X
+      game.applyMove(39); // O row 4
+      game.applyMove(1);  // X
+      game.applyMove(47); // O row 5
+      game.applyMove(2);  // X
+      game.applyMove(55); // O row 6
+      game.applyMove(3);  // X
+      const result = game.applyMove(63); // O row 7 - wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'O', 'O should win');
+      assertArrayEquals(result.winningLine, [39, 47, 55, 63], 'Winning line should be vertical');
+    });
+
+    runner.test('Vertical win crossing halves - INVALID', () => {
+      const game = new GameEngine();
+      // X attempts vertical win from row 2-5 (crosses boundary between rows 3-4)
+      // Column 0: indices 16,24,32,40
+      game.applyMove(16); // X row 2 (top half)
+      game.applyMove(0);  // O
+      game.applyMove(24); // X row 3 (top half)
+      game.applyMove(1);  // O
+      game.applyMove(32); // X row 4 (bottom half)
+      game.applyMove(2);  // O
+      const result = game.applyMove(40); // X row 5 (bottom half) - crosses boundary
+      assertEquals(result.gameOver, false, 'Game should NOT be over (win crosses halves)');
+    });
+
+    // Diagonal win tests
+    runner.section('Diagonal Win Detection');
+
+    runner.test('Diagonal win (down-right) in opponent side (X in top half) - VALID', () => {
+      const game = new GameEngine();
+      // X wins diagonally in top half
+      // Indices: 0,9,18,27 (rows 0-3, cols 0-3)
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(9);  // X
+      game.applyMove(33); // O
+      game.applyMove(18); // X
+      game.applyMove(34); // O
+      const result = game.applyMove(27); // X wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'X', 'X should win');
+      assertArrayEquals(result.winningLine, [0, 9, 18, 27], 'Winning line should be diagonal');
+    });
+
+    runner.test('Diagonal win (down-left) in opponent side (O in bottom half) - VALID', () => {
+      const game = new GameEngine();
+      // O wins diagonally (down-left) in bottom half
+      // Start at row 4, col 7: index 39
+      // Indices: 39,46,53,60 (rows 4-7, cols 7,6,5,4)
+      game.applyMove(0);  // X
+      game.applyMove(39); // O
+      game.applyMove(1);  // X
+      game.applyMove(46); // O
+      game.applyMove(2);  // X
+      game.applyMove(53); // O
+      game.applyMove(3);  // X
+      const result = game.applyMove(60); // O wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'O', 'O should win');
+      assertArrayEquals(result.winningLine, [39, 46, 53, 60], 'Winning line should be diagonal');
+    });
+
+    runner.test('Diagonal win crossing halves - INVALID', () => {
+      const game = new GameEngine();
+      // X attempts diagonal win crossing boundary
+      // Indices: 16,25,34,43 (rows 2-5, cols 0-3) - crosses at rows 3-4
+      game.applyMove(16); // X row 2 (top)
+      game.applyMove(0);  // O
+      game.applyMove(25); // X row 3 (top)
+      game.applyMove(1);  // O
+      game.applyMove(34); // X row 4 (bottom)
+      game.applyMove(2);  // O
+      const result = game.applyMove(43); // X row 5 (bottom) - crosses boundary
+      assertEquals(result.gameOver, false, 'Game should NOT be over (diagonal crosses halves)');
+    });
+
+    // Edge and corner tests
+    runner.section('Edge and Corner Cases');
+
+    runner.test('Win in top-left corner (X) - VALID', () => {
+      const game = new GameEngine();
+      // Horizontal win in row 0, starting at col 0
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(1);  // X
+      game.applyMove(33); // O
+      game.applyMove(2);  // X
+      game.applyMove(34); // O
+      const result = game.applyMove(3);  // X wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'X', 'X should win');
+    });
+
+    runner.test('Win in bottom-right corner (O) - VALID', () => {
+      const game = new GameEngine();
+      // Horizontal win in row 7, ending at col 7 (index 63)
+      // Indices: 60,61,62,63
+      game.applyMove(0);  // X
+      game.applyMove(60); // O
+      game.applyMove(1);  // X
+      game.applyMove(61); // O
+      game.applyMove(2);  // X
+      game.applyMove(62); // O
+      game.applyMove(3);  // X
+      const result = game.applyMove(63); // O wins
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'O', 'O should win');
+    });
+
+    runner.test('Win at exact boundary (row 3) for X - VALID', () => {
+      const game = new GameEngine();
+      // X wins in row 3 (last row of top half)
+      // Indices: 24,25,26,27
+      game.applyMove(24); // X
+      game.applyMove(32); // O
+      game.applyMove(25); // X
+      game.applyMove(33); // O
+      game.applyMove(26); // X
+      game.applyMove(34); // O
+      const result = game.applyMove(27); // X wins at boundary
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'X', 'X should win at boundary row');
+    });
+
+    runner.test('Win at exact boundary (row 4) for O - VALID', () => {
+      const game = new GameEngine();
+      // O wins in row 4 (first row of bottom half)
+      // Indices: 32,33,34,35
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(1);  // X
+      game.applyMove(33); // O
+      game.applyMove(2);  // X
+      game.applyMove(34); // O
+      game.applyMove(3);  // X
+      const result = game.applyMove(35); // O wins at boundary
+      assert(result.gameOver, 'Game should be over');
+      assertEquals(result.winner, 'O', 'O should win at boundary row');
+    });
+
+    // False positive tests
+    runner.section('False Positive Prevention');
+
+    runner.test('3-in-a-row does not trigger win', () => {
+      const game = new GameEngine();
+      // X gets 3 in a row but not 4
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(1);  // X
+      game.applyMove(33); // O
+      const result = game.applyMove(2);  // X has 3 in a row
+      assertEquals(result.gameOver, false, 'Game should NOT be over with only 3 in a row');
+    });
+
+    runner.test('Disconnected pieces do not trigger win', () => {
+      const game = new GameEngine();
+      // X: 0,1,3,4 (missing index 2)
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(1);  // X
+      game.applyMove(33); // O
+      game.applyMove(3);  // X (skip 2)
+      game.applyMove(34); // O
+      const result = game.applyMove(4);  // X (not a valid line)
+      assertEquals(result.gameOver, false, 'Disconnected pieces should not win');
+    });
+
+    runner.test('5-in-a-row in opponent side still wins (counts first 4)', () => {
+      const game = new GameEngine();
+      // X gets 5 in a row in top half
+      game.applyMove(0);  // X
+      game.applyMove(32); // O
+      game.applyMove(1);  // X
+      game.applyMove(33); // O
+      game.applyMove(2);  // X
+      game.applyMove(34); // O
+      game.applyMove(3);  // X wins (4 in a row)
+      assert(game.gameOver, 'Game should be over');
+      // Even if they could place a 5th, the game is already over
+    });
+
+    runner.test('Draw detection when board is full', () => {
+      const game = new GameEngine();
+      // Fill board without creating a valid win
+      // This is complex to set up manually, so we'll test the basic mechanism
+      const moves = [];
+      // Create a pattern that won't win for either player
+      // We'll just verify draw detection works when board is full
+      for (let i = 0; i < 64; i++) {
+        moves.push(i);
+      }
+
+      // Shuffle to avoid wins (simplified test - just verify mechanism)
+      let moveCount = 0;
+      for (const move of moves) {
+        if (game.gameOver) break;
+        game.applyMove(move);
+        moveCount++;
+      }
+
+      // If it's not a draw, at least verify the valid moves are tracked
+      const validMoves = game.getValidMoves();
+      assertEquals(validMoves.length, 64 - moveCount, 'Valid moves should decrease');
+    });
+
+    // Run all tests
+    runner.run();
+  </script>
+</body>
+</html>

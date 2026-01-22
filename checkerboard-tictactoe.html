@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Checkerboard Tic-Tac-Toe</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: linear-gradient(135deg, #e8f0ff 0%, #fdf6ff 55%, #f4fbff 100%);
+      --panel: #ffffff;
+      --line: #c9d4e5;
+      --accent: #2f5fe8;
+      --x: #1b6ef3;
+      --o: #e84a5f;
+      --muted: #5c667a;
+      --win: #20b26b;
+      --dark-cell: #3d5a80;
+      --light-cell: #f0f4f8;
+      --boundary: #ffd60a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: #1d2433;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      touch-action: manipulation;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    .game {
+      background: var(--panel);
+      padding: 28px;
+      border-radius: 18px;
+      box-shadow: 0 20px 40px rgba(25, 35, 57, 0.12);
+      width: min(680px, 95vw);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+      text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+    }
+
+    .game.over {
+      background: #f8faff;
+      box-shadow: 0 24px 50px rgba(25, 35, 57, 0.18);
+    }
+
+    .game.win {
+      animation: celebrate 0.9s ease-in-out;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.8rem;
+      background: linear-gradient(135deg, var(--x) 0%, var(--o) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .rules-info {
+      width: 100%;
+      background: #fffbeb;
+      border-radius: 12px;
+      padding: 12px 16px;
+      border: 2px solid #fbbf24;
+      font-size: 0.85rem;
+      color: #78350f;
+      text-align: left;
+    }
+
+    .rules-info strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #92400e;
+    }
+
+    .scoreboard {
+      width: 100%;
+      background: #eff3ff;
+      border-radius: 16px;
+      padding: 12px 16px;
+      font-weight: 700;
+      color: #1d2433;
+      box-shadow: inset 0 0 0 1px rgba(201, 212, 229, 0.9);
+    }
+
+    .scoreboard span {
+      color: var(--accent);
+    }
+
+    .game-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--muted);
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #f4f7ff;
+      border: 1px solid rgba(201, 212, 229, 0.8);
+    }
+
+    .game-state.over {
+      color: #fff;
+      background: var(--win);
+      border-color: transparent;
+    }
+
+    .turn-indicator {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .turn-indicator .token {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: #f6f8ff;
+      transition: all 0.2s ease;
+    }
+
+    .turn-indicator .token.active {
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 6px 16px rgba(47, 95, 232, 0.25);
+    }
+
+    .turn-indicator .token.x.active {
+      background: var(--x);
+    }
+
+    .turn-indicator .token.o.active {
+      background: var(--o);
+    }
+
+    #status {
+      font-size: 1rem;
+      color: var(--muted);
+      min-height: 1.4em;
+      transition: color 0.2s ease;
+    }
+
+    .board-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .side-labels {
+      display: flex;
+      width: 100%;
+      max-width: 520px;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--muted);
+      padding: 0 8px;
+    }
+
+    .side-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: #f0f4f8;
+    }
+
+    .side-label .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .side-label.x-zone .dot {
+      background: var(--x);
+    }
+
+    .side-label.o-zone .dot {
+      background: var(--o);
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(48px, 1fr));
+      grid-template-rows: repeat(8, minmax(48px, 1fr));
+      gap: 0;
+      width: 100%;
+      max-width: 520px;
+      padding: 8px;
+      border-radius: 16px;
+      background: #2c3e50;
+      box-shadow: 0 12px 24px rgba(27, 51, 106, 0.18);
+      position: relative;
+    }
+
+    .board::after {
+      content: '';
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 50%;
+      height: 3px;
+      background: var(--boundary);
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 0 8px rgba(255, 214, 10, 0.6);
+    }
+
+    .board.disabled {
+      pointer-events: none;
+      opacity: 0.9;
+    }
+
+    .cell {
+      background: var(--light-cell);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      font-size: clamp(1.4rem, 4vw, 2rem);
+      font-weight: 800;
+      color: #1d2433;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1 / 1;
+      min-width: 44px;
+      min-height: 44px;
+      touch-action: manipulation;
+      position: relative;
+    }
+
+    .cell.dark {
+      background: var(--dark-cell);
+    }
+
+    .cell.filled {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .cell.x {
+      color: var(--x);
+      text-shadow: 0 2px 8px rgba(27, 110, 243, 0.4);
+    }
+
+    .cell.o {
+      color: var(--o);
+      text-shadow: 0 2px 8px rgba(232, 74, 95, 0.4);
+    }
+
+    .cell.empty:hover {
+      transform: scale(1.08);
+      background: var(--light-cell);
+      box-shadow: inset 0 0 0 2px var(--accent);
+      z-index: 5;
+    }
+
+    .cell.dark.empty:hover {
+      background: #4a6fa5;
+    }
+
+    .cell:active {
+      transform: scale(0.95);
+    }
+
+    .cell.winning {
+      background: #ffd700 !important;
+      box-shadow: 0 0 0 3px rgba(32, 178, 107, 0.5);
+      animation: glow 1s ease-in-out infinite;
+      z-index: 5;
+    }
+
+    .game.over .cell.empty:hover {
+      transform: none;
+      box-shadow: none;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .controls .play-again {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+    }
+
+    .game.over .controls .play-again {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .button {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+      min-height: 44px;
+      touch-action: manipulation;
+    }
+
+    .button.secondary {
+      background: #eef1fb;
+      color: #1d2433;
+      border: 1px solid rgba(201, 212, 229, 0.9);
+    }
+
+    .button:hover {
+      transform: translateY(-2px) scale(1.01);
+      box-shadow: 0 10px 20px rgba(47, 95, 232, 0.2);
+    }
+
+    .button:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    .move-history {
+      width: 100%;
+      background: #f9faff;
+      border-radius: 14px;
+      padding: 10px 14px;
+      border: 1px solid rgba(201, 212, 229, 0.7);
+      max-height: 140px;
+      overflow-y: auto;
+      text-align: left;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .move-history strong {
+      color: #1d2433;
+    }
+
+    .move-history ul {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .move-history li {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .message-win {
+      color: var(--win);
+      font-weight: 600;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.8);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes glow {
+      0%, 100% {
+        box-shadow: 0 0 0 3px rgba(32, 178, 107, 0.5);
+      }
+      50% {
+        box-shadow: 0 0 16px rgba(32, 178, 107, 0.8);
+      }
+    }
+
+    @keyframes celebrate {
+      0% {
+        transform: scale(1);
+      }
+      40% {
+        transform: scale(1.02);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .game {
+        padding: 20px 16px;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+      }
+
+      .board {
+        max-width: 100%;
+        grid-template-columns: repeat(8, minmax(36px, 1fr));
+        grid-template-rows: repeat(8, minmax(36px, 1fr));
+      }
+
+      .cell {
+        font-size: clamp(1.2rem, 3.5vw, 1.6rem);
+      }
+
+      .rules-info {
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="game" id="game">
+    <h1>Checkerboard Tic-Tac-Toe</h1>
+
+    <div class="rules-info">
+      <strong>🎯 Win Condition:</strong>
+      Get 4-in-a-row (horizontal, vertical, or diagonal) <strong>entirely in your opponent's side</strong> of the board.
+      <br>
+      <strong>X</strong> must win in top half (O's territory) • <strong>O</strong> must win in bottom half (X's territory)
+    </div>
+
+    <div class="scoreboard" id="scoreboard">
+      Player X: <span id="score-x">0</span> wins | Player O: <span id="score-o">0</span> wins | Draws: <span id="score-draws">0</span>
+    </div>
+
+    <div class="game-state" id="game-state">In progress</div>
+
+    <div class="turn-indicator" aria-label="Current turn">
+      <span class="token x" id="turn-x">Player X</span>
+      <span class="token o" id="turn-o">Player O</span>
+    </div>
+
+    <div id="status">Player X's turn</div>
+
+    <div class="board-container">
+      <div class="side-labels">
+        <div class="side-label o-zone">
+          <span class="dot"></span>
+          <span>O's Home / X's Target</span>
+        </div>
+      </div>
+
+      <div class="board" id="board" aria-label="8x8 Checkerboard game board"></div>
+
+      <div class="side-labels">
+        <div class="side-label x-zone">
+          <span class="dot"></span>
+          <span>X's Home / O's Target</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="move-history" id="move-history">
+      <strong>Move History</strong>
+      <ul id="move-list"></ul>
+    </div>
+
+    <div class="controls">
+      <button class="button play-again" id="play-again">Play Again</button>
+      <button class="button secondary" id="reset-score">Reset Score</button>
+      <button class="button secondary" id="undo">Undo Move</button>
+    </div>
+  </main>
+
+  <script src="game-engine.js"></script>
+  <script>
+    // UI State
+    const gameElement = document.getElementById("game");
+    const boardElement = document.getElementById("board");
+    const statusElement = document.getElementById("status");
+    const playAgainButton = document.getElementById("play-again");
+    const resetScoreButton = document.getElementById("reset-score");
+    const undoButton = document.getElementById("undo");
+    const turnXElement = document.getElementById("turn-x");
+    const turnOElement = document.getElementById("turn-o");
+    const scoreXElement = document.getElementById("score-x");
+    const scoreOElement = document.getElementById("score-o");
+    const scoreDrawsElement = document.getElementById("score-draws");
+    const gameStateElement = document.getElementById("game-state");
+    const moveListElement = document.getElementById("move-list");
+
+    // Game instance
+    let game = new GameEngine();
+
+    // Session score tracking
+    const SCORE_KEY = "checkerboardTicTacToeScores";
+    let scores = {
+      x: 0,
+      o: 0,
+      draws: 0
+    };
+
+    // Initialize
+    function init() {
+      loadScores();
+      renderBoard();
+      updateUI();
+    }
+
+    // Render the 8x8 checkered board
+    function renderBoard() {
+      boardElement.innerHTML = "";
+      boardElement.classList.toggle("disabled", game.gameOver);
+
+      const winningIndices = new Set(game.winningLine || []);
+
+      for (let i = 0; i < game.CELLS_COUNT; i++) {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        const coords = game.indexToCoords(i);
+
+        // Checkerboard pattern: dark if (row + col) is odd
+        const isDark = (coords.row + coords.col) % 2 === 1;
+        const value = game.board[i];
+        const baseClass = value ? value.toLowerCase() : "empty";
+        const filledClass = value ? "filled" : "";
+        const darkClass = isDark ? "dark" : "";
+        const isWinning = winningIndices.has(i);
+
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""}`.trim();
+        cell.textContent = value;
+        cell.setAttribute("data-index", i);
+        cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
+        cell.addEventListener("click", handleCellClick);
+        cell.disabled = value !== game.EMPTY || game.gameOver;
+
+        boardElement.appendChild(cell);
+      }
+    }
+
+    // Handle cell click
+    function handleCellClick(event) {
+      const index = Number(event.currentTarget.getAttribute("data-index"));
+      const result = game.applyMove(index);
+
+      if (result.success) {
+        renderBoard();
+        updateUI();
+
+        if (result.gameOver) {
+          handleGameOver(result);
+        }
+      }
+    }
+
+    // Update all UI elements
+    function updateUI() {
+      updateStatus();
+      updateTurnIndicator();
+      updateGameState();
+      updateMoveHistory();
+      updateUndoButton();
+    }
+
+    // Update status message
+    function updateStatus() {
+      if (game.gameOver) {
+        if (game.winner) {
+          statusElement.textContent = `Player ${game.winner} wins!`;
+          statusElement.classList.add("message-win");
+        } else {
+          statusElement.textContent = "It's a draw!";
+          statusElement.classList.remove("message-win");
+        }
+      } else {
+        statusElement.textContent = `Player ${game.currentPlayer}'s turn`;
+        statusElement.classList.remove("message-win");
+      }
+    }
+
+    // Update turn indicator
+    function updateTurnIndicator() {
+      const isXTurn = game.currentPlayer === game.PLAYER_X && !game.gameOver;
+      const isOTurn = game.currentPlayer === game.PLAYER_O && !game.gameOver;
+      turnXElement.classList.toggle("active", isXTurn);
+      turnOElement.classList.toggle("active", isOTurn);
+    }
+
+    // Update game state badge
+    function updateGameState() {
+      const label = game.gameOver ? "Game over" : "In progress";
+      gameStateElement.textContent = label;
+      gameStateElement.classList.toggle("over", game.gameOver);
+    }
+
+    // Update move history display
+    function updateMoveHistory() {
+      moveListElement.innerHTML = "";
+
+      if (game.moveHistory.length === 0) {
+        return;
+      }
+
+      game.moveHistory.forEach((move, idx) => {
+        const item = document.createElement("li");
+        item.textContent = `${idx + 1}. ${move.player}`;
+
+        const position = document.createElement("span");
+        position.textContent = `R${move.row + 1}, C${move.col + 1}`;
+        item.appendChild(position);
+
+        moveListElement.appendChild(item);
+      });
+
+      // Auto-scroll to bottom
+      moveListElement.parentElement.scrollTop = moveListElement.parentElement.scrollHeight;
+    }
+
+    // Update undo button state
+    function updateUndoButton() {
+      undoButton.disabled = game.moveHistory.length === 0;
+    }
+
+    // Handle game over
+    function handleGameOver(result) {
+      gameElement.classList.add("over");
+
+      if (result.winner) {
+        gameElement.classList.add("win");
+
+        if (result.winner === game.PLAYER_X) {
+          scores.x++;
+        } else if (result.winner === game.PLAYER_O) {
+          scores.o++;
+        }
+      } else {
+        scores.draws++;
+      }
+
+      saveScores();
+      updateScoreboard();
+    }
+
+    // Load scores from sessionStorage
+    function loadScores() {
+      const stored = sessionStorage.getItem(SCORE_KEY);
+      if (stored) {
+        try {
+          scores = JSON.parse(stored);
+        } catch (error) {
+          scores = { x: 0, o: 0, draws: 0 };
+        }
+      }
+      updateScoreboard();
+    }
+
+    // Save scores to sessionStorage
+    function saveScores() {
+      sessionStorage.setItem(SCORE_KEY, JSON.stringify(scores));
+    }
+
+    // Update scoreboard display
+    function updateScoreboard() {
+      scoreXElement.textContent = scores.x;
+      scoreOElement.textContent = scores.o;
+      scoreDrawsElement.textContent = scores.draws;
+    }
+
+    // Reset game
+    function resetGame() {
+      game.reset();
+      gameElement.classList.remove("over", "win");
+      renderBoard();
+      updateUI();
+    }
+
+    // Reset scores
+    function resetScores() {
+      if (!confirm("Reset all scores back to 0?")) {
+        return;
+      }
+      scores = { x: 0, o: 0, draws: 0 };
+      saveScores();
+      updateScoreboard();
+    }
+
+    // Undo last move
+    function undoMove() {
+      if (game.moveHistory.length === 0) {
+        return;
+      }
+
+      // Get the last move
+      const lastMove = game.moveHistory[game.moveHistory.length - 1];
+
+      // Remove it from the board
+      game.board[lastMove.index] = game.EMPTY;
+
+      // Remove from history
+      game.moveHistory.pop();
+
+      // Reset game over state
+      game.gameOver = false;
+      game.winner = null;
+      game.winningLine = null;
+      gameElement.classList.remove("over", "win");
+
+      // Switch back to previous player
+      game.currentPlayer = lastMove.player;
+
+      // Re-render
+      renderBoard();
+      updateUI();
+    }
+
+    // Event listeners
+    playAgainButton.addEventListener("click", resetGame);
+    resetScoreButton.addEventListener("click", resetScores);
+    undoButton.addEventListener("click", undoMove);
+
+    // Start the game
+    init();
+  </script>
+</body>
+</html>

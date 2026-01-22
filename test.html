@@ -1172,6 +1172,122 @@
       }
     });
 
+    // ============================================================
+    // FIFO ORDERING TESTS (for warning highlights)
+    // ============================================================
+
+    runner.section('FIFO Ordering Tests');
+
+    runner.test('getFifoOrder returns pieces in correct oldest-first order', () => {
+      const game = new GameEngine();
+
+      // Place pieces in specific order
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X has pieces at: 40 (ply 0), 10 (ply 2), 50 (ply 4)
+      const xFifo = game.getFifoOrder('X');
+      assertArrayEquals(xFifo, [40, 10, 50], 'X FIFO order should be oldest first');
+
+      // O has pieces at: 45 (ply 1), 15 (ply 3), 55 (ply 5)
+      const oFifo = game.getFifoOrder('O');
+      assertArrayEquals(oFifo, [45, 15, 55], 'O FIFO order should be oldest first');
+    });
+
+    runner.test('getFifoOrder with count parameter returns top N pieces', () => {
+      const game = new GameEngine();
+
+      // Place pieces
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Get top 2 oldest for X
+      const xTop2 = game.getFifoOrder('X', 2);
+      assertEquals(xTop2.length, 2, 'Should return exactly 2 pieces');
+      assertArrayEquals(xTop2, [40, 10], 'X top 2 should be oldest pieces');
+
+      // Get top 2 oldest for O
+      const oTop2 = game.getFifoOrder('O', 2);
+      assertEquals(oTop2.length, 2, 'Should return exactly 2 pieces');
+      assertArrayEquals(oTop2, [45, 15], 'O top 2 should be oldest pieces');
+    });
+
+    runner.test('getFifoOrder returns empty array when player has no pieces', () => {
+      const game = new GameEngine();
+
+      const xFifo = game.getFifoOrder('X');
+      assertEquals(xFifo.length, 0, 'Should return empty array for X initially');
+
+      const oFifo = game.getFifoOrder('O');
+      assertEquals(oFifo.length, 0, 'Should return empty array for O initially');
+    });
+
+    runner.test('getFifoOrder updates correctly after FIFO removal', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X has: 40 (ply 0), 10 (ply 2), 50 (ply 4)
+      const xFifoBefore = game.getFifoOrder('X');
+      assertArrayEquals(xFifoBefore, [40, 10, 50], 'X FIFO before removal');
+
+      // X places 4th piece, triggers FIFO removal of index 40
+      game.applyMove(20); // X, ply 6
+
+      // Now X has: 10 (ply 2), 50 (ply 4), 20 (ply 6)
+      const xFifoAfter = game.getFifoOrder('X');
+      assertArrayEquals(xFifoAfter, [10, 50, 20], 'X FIFO should update after removal');
+    });
+
+    runner.test('getFifoOrder handles player with only 1 piece', () => {
+      const game = new GameEngine();
+
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+
+      const xFifo = game.getFifoOrder('X', 2);
+      assertEquals(xFifo.length, 1, 'Should return 1 piece when only 1 exists');
+      assertArrayEquals(xFifo, [40], 'Should return the single piece');
+
+      const oFifo = game.getFifoOrder('O', 2);
+      assertEquals(oFifo.length, 1, 'Should return 1 piece when only 1 exists');
+      assertArrayEquals(oFifo, [45], 'Should return the single piece');
+    });
+
+    runner.test('getFifoOrder is deterministic', () => {
+      const game1 = new GameEngine();
+      const game2 = new GameEngine();
+
+      // Make same moves in both games
+      for (const index of [40, 45, 10, 15, 50, 55]) {
+        game1.applyMove(index);
+        game2.applyMove(index);
+      }
+
+      // Results should be identical
+      const xFifo1 = game1.getFifoOrder('X');
+      const xFifo2 = game2.getFifoOrder('X');
+      assertArrayEquals(xFifo1, xFifo2, 'X FIFO order should be deterministic');
+
+      const oFifo1 = game1.getFifoOrder('O');
+      const oFifo2 = game2.getFifoOrder('O');
+      assertArrayEquals(oFifo1, oFifo2, 'O FIFO order should be deterministic');
+    });
+
     // Run all tests
     runner.run();
   </script>

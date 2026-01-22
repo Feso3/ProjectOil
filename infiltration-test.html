@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Infiltration Engine v1.1 Tests</title>
+  <title>Infiltration Engine v1.2 Tests</title>
   <style>
     body {
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -92,7 +92,7 @@
   </style>
 </head>
 <body>
-  <h1>Tic-Tac-Toe 2: Infiltration v1.1 - Engine Tests</h1>
+  <h1>Tic-Tac-Toe 2: Infiltration v1.2 - Engine Tests</h1>
   <div id="test-results"></div>
 
   <script src="infiltration-engine.js"></script>
@@ -202,30 +202,27 @@
     // Initialization tests
     runner.section('Initialization and Configuration');
 
-    runner.test('Game initializes with default configuration (v1.1)', () => {
+    runner.test('Game initializes with default configuration (v1.2)', () => {
       const game = new InfiltrationEngine();
       assertEquals(game.config.pieceCount, 10, 'Default piece count should be 10');
       assertEquals(game.config.captureEnabled, true, 'Capture should be enabled by default');
-      assertEquals(game.config.multiJump, true, 'Multi-jump should be enabled by default');
       assertEquals(game.phase, 'placement', 'Should start in placement phase');
       assertEquals(game.currentPlayer, 'X', 'X should go first');
-      assertEquals(game.VERSION, '1.1', 'Version should be 1.1');
+      assertEquals(game.VERSION, '1.2', 'Version should be 1.2');
     });
 
     runner.test('Game accepts custom configuration', () => {
       const game = new InfiltrationEngine({
         pieceCount: 6,
         captureEnabled: false,
-        multiJump: false,
         forcedCapture: true
       });
       assertEquals(game.config.pieceCount, 6, 'Custom piece count should be set');
       assertEquals(game.config.captureEnabled, false, 'Capture should be disabled');
-      assertEquals(game.config.multiJump, false, 'Multi-jump should be disabled');
       assertEquals(game.config.forcedCapture, true, 'Forced capture should be enabled');
     });
 
-    runner.test('Initial inventories are correct (v1.1 default: 10)', () => {
+    runner.test('Initial inventories are correct (v1.2 default: 10)', () => {
       const game = new InfiltrationEngine();
       assertEquals(game.inventory.X, 10, 'X should have 10 pieces');
       assertEquals(game.inventory.O, 10, 'O should have 10 pieces');
@@ -239,7 +236,7 @@
       const result = game.placePiece(32); // Row 4, bottom half
       assert(result.success, 'Placement should succeed');
       assertEquals(game.board[32], 'X', 'X should be placed');
-      assertEquals(game.inventory.X, 7, 'X inventory should decrease');
+      assertEquals(game.inventory.X, 9, 'X inventory should decrease');
     });
 
     runner.test('X cannot place piece in opponent territory (top half)', () => {
@@ -320,38 +317,44 @@
     });
 
     // Movement phase tests
-    runner.section('Phase 2: Movement - Basic Moves');
+    runner.section('Phase 2: Movement - Forward-Only Steps');
 
-    runner.test('Can move piece diagonally forward', () => {
+    runner.test('Non-king cannot move backward', () => {
       const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.placePiece(40); // X at row 5, col 0
-      game.placePiece(0);  // O at row 0, col 0
-      // Now in movement phase
-      const moves = game.getValidMovesForPiece(40);
-      assert(moves.length > 0, 'Should have valid moves');
-      assert(moves.some(m => m.to === 32 || m.to === 33), 'Should be able to move diagonally forward');
+      game.phase = 'movement';
+      game.board[27] = 'X'; // Row 3, col 3
+      game.currentPlayer = 'X';
+
+      const moves = game.getValidMovesForPiece(27);
+      const moveIndices = moves.filter(m => m.type === 'move').map(m => m.to);
+
+      assert(!moveIndices.includes(35), 'Non-king X should not move backward');
+      assert(moveIndices.includes(19), 'Non-king X should move forward');
+      assert(moveIndices.includes(26), 'Non-king X should move sideways');
     });
 
-    runner.test('X moves forward (up, negative row direction)', () => {
+    runner.test('King can move backward', () => {
       const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.placePiece(40); // X at row 5, col 0
-      game.placePiece(0);  // O
-      // X moves diagonally up-right
-      const result = game.movePiece(40, 33); // row 4, col 1
-      assert(result.success, 'Move should succeed');
-      assertEquals(game.board[40], '', 'Old position should be empty');
-      assertEquals(game.board[33], 'X', 'New position should have X');
+      game.phase = 'movement';
+      game.board[27] = 'X'; // Row 3, col 3
+      game.kings[27] = true;
+      game.currentPlayer = 'X';
+
+      const moves = game.getValidMovesForPiece(27);
+      const moveIndices = moves.filter(m => m.type === 'move').map(m => m.to);
+
+      assert(moveIndices.includes(35), 'King should be able to move backward');
     });
 
-    runner.test('O moves forward (down, positive row direction)', () => {
+    runner.test('Promotion triggers at far edge', () => {
       const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.placePiece(40); // X
-      game.placePiece(0);  // O at row 0, col 0
-      // O's turn in movement phase
-      game.movePiece(40, 33); // X moves first
-      const result = game.movePiece(0, 9); // O moves diagonally down-right
+      game.phase = 'movement';
+      game.board[9] = 'X'; // Row 1, col 1
+      game.currentPlayer = 'X';
+
+      const result = game.movePiece(9, 1); // Move to row 0
       assert(result.success, 'Move should succeed');
-      assertEquals(game.board[9], 'O', 'O should move forward');
+      assert(game.isKingAt(1), 'Piece should be promoted to king');
     });
 
     runner.test('Cannot move to occupied square', () => {
@@ -361,34 +364,38 @@
       game.placePiece(41); // X
       game.placePiece(1);  // O
       // Try to move into occupied space
-      const result = game.movePiece(40, 33);
+      game.movePiece(40, 33);
       game.movePiece(0, 9);
-      const result2 = game.movePiece(41, 33); // 33 is now occupied by X's first piece
-      // Actually 33 should be empty after first X moved there
-      // Let me reconsider - 40 moved to 33, so 33 is occupied
-      // 41 trying to move to 33 should fail
+      const result2 = game.movePiece(41, 33); // 33 is occupied by X's first piece
       assertEquals(result2.success, false, 'Cannot move to occupied square');
     });
 
     // Capture tests
     runner.section('Phase 2: Capture Mechanics');
 
-    runner.test('Can capture enemy piece by jumping', () => {
-      const game = new InfiltrationEngine({ pieceCount: 2 });
-      game.placePiece(40); // X at row 5, col 0
-      game.placePiece(0);  // O
-      game.placePiece(41); // X
-      game.placePiece(1);  // O
-      // Move X forward
-      game.movePiece(40, 33); // X to row 4, col 1
-      // Move O forward to be adjacent
-      game.movePiece(0, 9);  // O to row 1, col 1
-      // Move X forward
-      game.movePiece(41, 32); // X at row 4, col 0
-      // Move O to be jumpable by X at 33
-      game.movePiece(1, 10); // O at row 1, col 2
-      // Need to set up a capture scenario
-      // Let me create a simpler test
+    runner.test('Non-king cannot capture backward', () => {
+      const game = new InfiltrationEngine({ pieceCount: 1 });
+      game.phase = 'movement';
+      game.board[27] = 'X'; // Row 3, col 3
+      game.board[35] = 'O'; // Backward adjacent
+      game.currentPlayer = 'X';
+
+      const moves = game.getValidMovesForPiece(27);
+      const captureIndices = moves.filter(m => m.type === 'capture').map(m => m.to);
+      assert(!captureIndices.includes(43), 'Non-king X should not capture backward');
+    });
+
+    runner.test('King can capture backward', () => {
+      const game = new InfiltrationEngine({ pieceCount: 1 });
+      game.phase = 'movement';
+      game.board[27] = 'X'; // Row 3, col 3
+      game.board[35] = 'O'; // Backward adjacent
+      game.kings[27] = true;
+      game.currentPlayer = 'X';
+
+      const moves = game.getValidMovesForPiece(27);
+      const capture = moves.find(m => m.type === 'capture' && m.to === 43);
+      assert(capture !== undefined, 'King should be able to capture backward');
     });
 
     runner.test('Captured piece returns to owner inventory', () => {
@@ -407,6 +414,24 @@
       assertEquals(game.board[25], '', 'Captured piece should be removed');
       assertEquals(game.inventory.O, 1, 'O should get piece back in inventory');
       assertEquals(game.capturedPieces.O, 1, 'Captured pieces counter should increase');
+    });
+
+    runner.test('Capture ends the turn immediately', () => {
+      const game = new InfiltrationEngine({ pieceCount: 1 });
+      game.phase = 'movement';
+      game.inventory.X = 0;
+      game.inventory.O = 0;
+      game.board[33] = 'X';
+      game.board[25] = 'O';
+      game.board[41] = 'X';
+      game.currentPlayer = 'X';
+
+      const result = game.movePiece(33, 17);
+      assert(result.success, 'Capture should succeed');
+      assertEquals(game.currentPlayer, 'O', 'Turn should pass to O after capture');
+
+      const result2 = game.movePiece(41, 33);
+      assertEquals(result2.success, false, 'X should not move again after capture');
     });
 
     runner.test('Captured pieces can be re-placed', () => {
@@ -436,125 +461,6 @@
       const moves = game.getValidMovesForPiece(33);
       const captureMoves = moves.filter(m => m.type === 'capture');
       assertEquals(captureMoves.length, 0, 'Should have no capture moves when disabled');
-    });
-
-    // v1.1 Movement tests
-    runner.section('Phase 2 v1.1: 8-Directional Movement');
-
-    runner.test('Piece can move to any adjacent square (8 directions)', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.phase = 'movement';
-      game.board[28] = 'X'; // X at row 3, col 4 (center area)
-      game.currentPlayer = 'X';
-
-      const moves = game.getValidMovesForPiece(28);
-      // Should have up to 8 moves (all adjacent squares if empty)
-      assert(moves.length === 8, 'Should have 8 adjacent moves from center');
-
-      // Verify all 8 directions are included
-      const moveTypes = moves.filter(m => m.type === 'move');
-      assertEquals(moveTypes.length, 8, 'All 8 moves should be standard moves');
-    });
-
-    runner.test('Piece can move orthogonally (N, S, E, W)', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.phase = 'movement';
-      game.board[28] = 'X'; // Row 3, col 4
-      game.currentPlayer = 'X';
-
-      const moves = game.getValidMovesForPiece(28);
-      const moveIndices = moves.map(m => m.to);
-
-      // North: 20, South: 36, East: 29, West: 27
-      assert(moveIndices.includes(20), 'Should be able to move North');
-      assert(moveIndices.includes(36), 'Should be able to move South');
-      assert(moveIndices.includes(29), 'Should be able to move East');
-      assert(moveIndices.includes(27), 'Should be able to move West');
-    });
-
-    runner.test('Piece can move diagonally (NE, NW, SE, SW)', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.phase = 'movement';
-      game.board[28] = 'X'; // Row 3, col 4
-      game.currentPlayer = 'X';
-
-      const moves = game.getValidMovesForPiece(28);
-      const moveIndices = moves.map(m => m.to);
-
-      // NE: 21, NW: 19, SE: 37, SW: 35
-      assert(moveIndices.includes(21), 'Should be able to move Northeast');
-      assert(moveIndices.includes(19), 'Should be able to move Northwest');
-      assert(moveIndices.includes(37), 'Should be able to move Southeast');
-      assert(moveIndices.includes(35), 'Should be able to move Southwest');
-    });
-
-    runner.test('Piece can capture orthogonally', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.phase = 'movement';
-      game.board[28] = 'X'; // Row 3, col 4
-      game.board[20] = 'O'; // Enemy to the North
-      game.currentPlayer = 'X';
-
-      const moves = game.getValidMovesForPiece(28);
-      const captures = moves.filter(m => m.type === 'capture');
-
-      // Should be able to jump North over enemy at 20 to land at 12
-      const northCapture = captures.find(c => c.to === 12 && c.via === 20);
-      assert(northCapture !== undefined, 'Should be able to capture North');
-    });
-
-    runner.test('Piece can capture diagonally', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1 });
-      game.phase = 'movement';
-      game.board[28] = 'X'; // Row 3, col 4
-      game.board[21] = 'O'; // Enemy to the Northeast
-      game.currentPlayer = 'X';
-
-      const moves = game.getValidMovesForPiece(28);
-      const captures = moves.filter(m => m.type === 'capture');
-
-      // Should be able to jump NE over enemy at 21 to land at 14
-      const neCapture = captures.find(c => c.to === 14 && c.via === 21);
-      assert(neCapture !== undefined, 'Should be able to capture Northeast');
-    });
-
-    runner.test('Multi-jump: can continue capturing after first capture', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1, multiJump: true });
-      game.phase = 'movement';
-      game.inventory.X = 0;
-      game.inventory.O = 0;
-
-      // Setup: X at 28, enemies at 20 and 4
-      game.board[28] = 'X'; // Row 3, col 4
-      game.board[20] = 'O'; // Row 2, col 4 (North)
-      game.board[4] = 'O';  // Row 0, col 4 (2 squares North from 12)
-      game.currentPlayer = 'X';
-
-      // First capture: jump from 28 over 20 to 12
-      const result1 = game.movePiece(28, 12);
-      assert(result1.success, 'First capture should succeed');
-      assertEquals(result1.moveType, 'capture', 'Should be a capture');
-      assert(result1.canContinue, 'Should be able to continue capturing');
-      assertEquals(result1.continueFrom, 12, 'Should continue from landing square');
-
-      // Second capture: jump from 12 over 4 to... wait, 4 is at row 0
-      // Let me recalculate: from 12, North is 4, and 2 North from 12 would be -4 (out of bounds)
-      // This test setup is wrong. Let me skip complex multi-jump for now
-    });
-
-    runner.test('Multi-jump disabled when config.multiJump = false', () => {
-      const game = new InfiltrationEngine({ pieceCount: 1, multiJump: false });
-      game.phase = 'movement';
-      game.inventory.X = 0;
-      game.inventory.O = 0;
-
-      game.board[28] = 'X';
-      game.board[20] = 'O';
-      game.currentPlayer = 'X';
-
-      const result = game.movePiece(28, 12); // Capture
-      assert(result.success, 'Capture should succeed');
-      assertEquals(result.canContinue, undefined, 'Should not offer continuation when disabled');
     });
 
     // Win condition tests

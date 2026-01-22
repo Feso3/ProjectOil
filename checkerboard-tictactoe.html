@@ -311,6 +311,84 @@
       box-shadow: 0 0 4px rgba(249, 115, 22, 0.6);
     }
 
+    /* Inactive half dimming effect */
+    .cell.inactive-half {
+      opacity: 0.35;
+      filter: grayscale(0.5);
+      cursor: not-allowed !important;
+      pointer-events: none;
+    }
+
+    .cell.inactive-half:hover {
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    /* Coin toss modal */
+    .coin-toss-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .coin-toss-content {
+      background: white;
+      padding: 32px;
+      border-radius: 18px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      text-align: center;
+      max-width: 400px;
+      animation: modalSlideIn 0.4s ease-out;
+    }
+
+    .coin-toss-content h2 {
+      margin: 0 0 16px 0;
+      font-size: 1.6rem;
+      color: #1d2433;
+    }
+
+    .coin-toss-result {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin: 24px 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #e8f0ff 0%, #fdf6ff 100%);
+      border-radius: 12px;
+    }
+
+    .coin-toss-result.x {
+      color: var(--x);
+    }
+
+    .coin-toss-result.o {
+      color: var(--o);
+    }
+
+    .coin-toss-message {
+      font-size: 1.1rem;
+      color: #5c667a;
+      margin-bottom: 24px;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
     @keyframes slideIn {
       from {
         opacity: 0;
@@ -619,6 +697,16 @@
   </style>
 </head>
 <body>
+  <!-- Coin Toss Modal -->
+  <div id="coin-toss-modal" class="coin-toss-modal" style="display: none;">
+    <div class="coin-toss-content">
+      <h2>🪙 Coin Toss</h2>
+      <div id="coin-toss-result" class="coin-toss-result"></div>
+      <div class="coin-toss-message">goes first!</div>
+      <button class="button" onclick="startGameAfterCoinToss()">Start Game</button>
+    </div>
+  </div>
+
   <main class="game" id="game">
     <h1>Checkerboard Tic-Tac-Toe</h1>
 
@@ -643,7 +731,7 @@
     <div id="status">Player X's turn</div>
 
     <div class="phase-indicator" id="phase-indicator">
-      Phase: <span id="phase-display">Opening (Step 1/6)</span>
+      Active Half: <span id="phase-display">X's Side (Bottom)</span>
     </div>
 
     <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
@@ -897,7 +985,13 @@
           fifoWarning = "fifo-warning-2"; // Orange - 2 moves away from removal
         }
 
-        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${fifoWarning}`.trim();
+        // Inactive half dimming: gray out and disable the half that's not currently active
+        const activeHalf = game.getActiveHalf();
+        const isInActiveHalf = (activeHalf === 'X' && game.isInXHalf(i)) ||
+                               (activeHalf === 'O' && game.isInOHalf(i));
+        const inactiveClass = !isInActiveHalf ? "inactive-half" : "";
+
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${fifoWarning} ${inactiveClass}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", i);
         cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
@@ -1023,13 +1117,12 @@
 
     // Update phase display
     function updatePhase() {
-      if (game.phase === game.PHASE_OPENING) {
-        const step = game.plyCount + 1; // 1-indexed for display
-        phaseDisplayElement.textContent = `Opening (Step ${step}/6)`;
-        phaseIndicatorElement.classList.remove("open-game");
+      // Show which half is currently active (playable)
+      const activeHalf = game.getActiveHalf();
+      if (activeHalf === 'X') {
+        phaseDisplayElement.textContent = "X's Side (Bottom)";
       } else {
-        phaseDisplayElement.textContent = "Open Game";
-        phaseIndicatorElement.classList.add("open-game");
+        phaseDisplayElement.textContent = "O's Side (Top)";
       }
     }
 
@@ -1163,12 +1256,26 @@
       scoreDrawsElement.textContent = scores.draws;
     }
 
-    // Reset game
-    function resetGame() {
-      game.reset();
-      gameElement.classList.remove("over", "win");
-      hideFifoAlert();
-      hideCPUThinking();
+    // Show coin toss modal
+    function showCoinTossModal() {
+      const modal = document.getElementById('coin-toss-modal');
+      const resultElement = document.getElementById('coin-toss-result');
+
+      // Show result
+      const startingPlayer = game.startingPlayer;
+      resultElement.textContent = `Player ${startingPlayer}`;
+      resultElement.className = `coin-toss-result ${startingPlayer.toLowerCase()}`;
+
+      // Show modal
+      modal.style.display = 'flex';
+    }
+
+    // Start game after coin toss modal is dismissed
+    function startGameAfterCoinToss() {
+      const modal = document.getElementById('coin-toss-modal');
+      modal.style.display = 'none';
+
+      // Render board and UI
       renderBoard();
       updateUI();
 
@@ -1179,6 +1286,17 @@
           setTimeout(executeCPUMove, 500);
         }
       }
+    }
+
+    // Reset game
+    function resetGame() {
+      game.reset();
+      gameElement.classList.remove("over", "win");
+      hideFifoAlert();
+      hideCPUThinking();
+
+      // Show coin toss modal with result
+      showCoinTossModal();
     }
 
     // Reset scores

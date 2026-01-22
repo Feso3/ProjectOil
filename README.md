@@ -99,9 +99,30 @@ When you place a piece during Open Game, the following happens **in this exact o
 - **UI Features**:
   - Phase indicator shows "Opening (Step X/6)" or "Open Game"
   - Per-player counters show piece count (e.g., "X: 7/8")
-  - Orange highlight preview shows which piece will be removed if you're at cap
+  - **FIFO Visibility** (see below for details):
+    - Always-visible "next out" markers (⏳) on both players' oldest pieces
+    - Hover preview shows which piece will be removed when placing a move
+    - Next-out info panel displays coordinates for both players
   - Move history marks opening moves with 🔷 and FIFO removals with [FIFO]
 - **Win**: First player to get 4-in-a-row entirely in opponent's territory wins
+
+### FIFO Visibility Features
+
+To help players plan their moves, the game provides transparent FIFO removal indicators:
+
+#### Always-Visible "Next Out" Markers
+- **What**: Each player's oldest piece (the one that would be removed first) is marked with a golden ring and ⏳ badge
+- **When**: Visible whenever pieces are on the board
+- **Purpose**: Shows which piece is at risk of FIFO removal for each player
+- **Display**: Info panel shows "X next out: R5, C5" and "O next out: R2, C3"
+
+#### Hover-Based Move Preview
+- **What**: When hovering over an empty square, pieces that would be removed are highlighted in red
+- **When**: Active during your turn (not during CPU turn)
+- **Purpose**: Preview the exact FIFO consequences before confirming a move
+- **Visual**: Strong red border with pulsing animation on piece(s) to be removed
+
+These features make FIFO removal transparent and help players strategize around piece lifetimes.
 
 ### Example Scenarios
 
@@ -215,6 +236,8 @@ The project follows a clean separation of concerns:
   - `findOldestPiece(player)`: Find oldest piece by plyIndex for FIFO removal
   - `getPieceToRemovePreview(player)`: Get piece that would be removed if player places now (for UI preview)
   - `predictFifoRemoval(player, move)`: Predict FIFO removal without modifying state (for CPU lookahead)
+  - **`getNextOutPiece(player)`**: Get the oldest piece for a player (always-visible "next out" indicator)
+  - **`getMoveRemovalPreview(moveIndex)`**: Simulate move and return pieces that would be removed (hover preview)
   - `countPlayerPieces(player)`: Count total pieces for player on board
   - `checkWin(player)`: Validate 4-in-a-row entirely in opponent's half
   - `isInOpponentHalf(index, player)`: Check if position is in opponent territory
@@ -249,6 +272,10 @@ The project follows a clean separation of concerns:
 ### UI Layer (`checkerboard-tictactoe.html`)
 - Renders the 8×8 checkered board
 - Handles user input and interactions
+- **FIFO visibility features**:
+  - Always-visible "next out" markers (⏳) on oldest pieces for both players
+  - Hover-based move removal preview (red highlight)
+  - Next-out info panel showing coordinates
 - CPU controls (enable/disable, difficulty selector)
 - Displays game state, turn indicators, and move history
 - Shows "CPU thinking..." indicator during CPU moves
@@ -259,6 +286,7 @@ The project follows a clean separation of concerns:
 - Edge case validation (boundaries, corners)
 - False positive prevention (3-in-a-row, disconnected pieces)
 - CPU player tests (determinism, rule compliance, move quality)
+- FIFO visibility tests (getNextOutPiece, getMoveRemovalPreview)
 - Visual board state for debugging
 
 ## 🧪 Test Coverage
@@ -298,6 +326,15 @@ The test suite validates:
 ✅ **Difficulty levels** Easy/Medium/Hard produce valid moves with different search depths
 ✅ **predictFifoRemoval** helper correctly predicts which piece will be removed
 ✅ **clone() method** preserves state and creates independent copies for search
+
+**FIFO Visibility Tests:**
+✅ **getNextOutPiece** returns oldest piece for each player
+✅ **Next-out updates** correctly after FIFO removal
+✅ **getMoveRemovalPreview** returns pieces for FIFO-triggering moves
+✅ **Preview returns empty** for non-FIFO moves
+✅ **Preview during opening** returns empty (FIFO disabled in opening)
+✅ **Preview for invalid moves** returns empty
+✅ **Deterministic visibility helpers** produce consistent results for same state
 
 ## 🔮 Future Enhancements
 

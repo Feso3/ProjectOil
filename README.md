@@ -1,5 +1,29 @@
-# Checkerboard Tic-Tac-Toe
+# ProjectOil - Strategic Board Games Collection
 
+A collection of innovative tic-tac-toe variants with strategic depth, territorial gameplay, and checkers-inspired mechanics.
+
+## 🎮 Games
+
+### 1. **Tic-Tac-Toe 2: Infiltration** (NEW!)
+The ultimate strategic evolution combining checkers movement with territorial objectives.
+
+**Two-Phase Gameplay:**
+- **Phase 1 (Placement)**: Players alternate placing 8 pieces in their home territory
+- **Phase 2 (Movement)**: Move pieces diagonally, capture enemies, promote to kings, and infiltrate
+
+**Win Condition:** Create 4-in-a-row (H/V/D) entirely in your opponent's territory
+
+**Key Features:**
+- Checkers-style diagonal movement (forward for regular pieces, both directions for kings)
+- Capture mechanics: Jump over adjacent enemies, return captured pieces to owner's inventory
+- King promotion: Reach the far edge to move in all diagonal directions
+- Configurable rules: Toggle pieces count, captures, kings, forced capture, pie rule
+
+[Play Infiltration](infiltration.html) | [View Tests](infiltration-test.html)
+
+---
+
+### 2. **Checkerboard Tic-Tac-Toe**
 A strategic twist on classic tic-tac-toe with territorial gameplay on an 8×8 checkered board.
 
 ## 🎮 Game Rules
@@ -28,26 +52,42 @@ Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your oppon
 
 ## 🚀 How to Play
 
-### Option 1: Web Version (Recommended)
-1. Open `checkerboard-tictactoe.html` in any modern web browser
-2. No build tools or installation required - it's completely self-contained
-3. Click on any empty square to place your piece
-4. The game automatically validates moves and detects wins
+### Web Version (Recommended)
+All games are completely self-contained - just open the HTML files in any modern web browser!
 
-### Option 2: Run Tests
-1. Open `test.html` in your web browser
-2. View comprehensive test results for the game engine
-3. All tests should pass, validating the win detection logic
+**Play Games:**
+- `index.html` - Landing page with all games
+- `infiltration.html` - Tic-Tac-Toe 2: Infiltration (advanced)
+- `checkerboard-tictactoe.html` - Checkerboard variant (strategic)
+- `tictactoe.html` - Classic 3×3 (with AI)
+
+**Run Tests:**
+- `infiltration-test.html` - Infiltration game engine tests
+- `test.html` - Checkerboard game engine tests
+
+**No installation required** - No npm, no build tools, no dependencies!
+
+### GitHub Pages (Mobile-Friendly)
+Visit: `https://Feso3.github.io/ProjectOil/`
+
+Play all games directly in your browser on desktop or mobile!
 
 ## 📁 Project Structure
 
 ```
 ProjectOil/
-├── checkerboard-tictactoe.html    # Main game (self-contained HTML/CSS/JS)
-├── game-engine.js                 # Pure game logic (no UI dependencies)
-├── test.html                      # Test suite with visual results
-├── tictactoe.html                 # Legacy 3×3 tic-tac-toe (original)
-├── main.py                        # Python CLI version (original, not updated)
+├── index.html                     # Landing page (game selector)
+│
+├── infiltration.html              # Infiltration game (NEW - advanced)
+├── infiltration-engine.js         # Infiltration game logic
+├── infiltration-test.html         # Infiltration test suite
+│
+├── checkerboard-tictactoe.html    # Checkerboard variant (strategic)
+├── game-engine.js                 # Checkerboard game logic
+├── test.html                      # Checkerboard test suite
+│
+├── tictactoe.html                 # Classic 3×3 (with AI)
+├── main.py                        # Python CLI version
 └── README.md                      # This file
 ```
 
@@ -146,6 +186,93 @@ function getBestMove(gameState) {
 Simply open `test.html` in a browser. All tests run automatically and display results.
 
 Expected output: **All tests pass** ✓
+
+---
+
+## 🎯 Tic-Tac-Toe 2: Infiltration - Detailed Rules
+
+### Game Overview
+Infiltration is a 2-player strategic board game that combines checkers-style movement with the territorial objective of getting 4-in-a-row in enemy territory.
+
+### Setup
+- **Board**: 8×8 checkered grid
+- **Players**: X (bottom) and O (top)
+- **Pieces**: Each player starts with 8 pieces (configurable: 4-16)
+- **Territories**:
+  - **Top half (rows 1-4)**: O's home, X's target zone
+  - **Bottom half (rows 5-8)**: X's home, O's target zone
+
+### Phase 1: Placement
+1. Players alternate placing one piece per turn
+2. Pieces **must** be placed in your home territory only
+3. Once all pieces are placed (8 per player by default), Phase 2 begins
+
+### Phase 2: Movement & Infiltration
+
+**Movement Rules:**
+- Select one of your pieces
+- Move **diagonally forward** one space into an empty square
+- Forward direction: X moves up (toward row 0), O moves down (toward row 7)
+- Regular pieces can only move forward; Kings can move any diagonal direction
+
+**Capture Rules** (if enabled):
+- Jump diagonally over an adjacent enemy piece into an empty square beyond
+- Remove the jumped piece from the board
+- Captured piece returns to the owner's inventory
+- On your next turn, you may re-place the captured piece in your home territory (instead of moving)
+- Forced capture (optional): If you can capture, you must capture
+
+**King Promotion** (if enabled):
+- X pieces reaching row 0 (top edge) become kings 👑
+- O pieces reaching row 7 (bottom edge) become kings 👑
+- Kings can move diagonally in ALL directions (forward and backward)
+- Kings maintain promotion after being captured and re-placed
+
+### Win Condition
+At the end of your turn, if you have **4 pieces in a row** (horizontal, vertical, or diagonal) **entirely within your opponent's territory**, you win immediately!
+
+**Critical Rules:**
+- All 4 pieces must be in opponent territory (no mixed territory wins)
+- Win is checked after every move
+- First player to achieve this wins
+
+### Optional Rules (Tuning Knobs)
+
+**Piece Count** (4-16)
+- Default: 8 pieces per player
+- More pieces = longer, more complex game
+
+**Capture** (ON/OFF)
+- Default: ON
+- OFF = pieces cannot be captured (pure movement game)
+
+**Kings** (ON/OFF)
+- Default: ON
+- OFF = no promotion, pieces always move forward only
+
+**Forced Capture** (ON/OFF)
+- Default: OFF
+- ON = if you can capture, you must (like international checkers)
+
+**Pie Rule** (ON/OFF)
+- Default: OFF
+- ON = after X's first placement, O can choose to swap colors
+- Balances first-player advantage
+
+### Strategy Tips
+1. **Build forward gradually**: Don't rush all pieces to the front
+2. **Control the center**: Center squares provide more movement options
+3. **Threaten multiple lines**: Force opponent to defend multiple potential 4-in-a-rows
+4. **Use captures wisely**: Trading pieces can open up board position
+5. **King timing**: Promoting too early can leave kings exposed
+6. **Defensive positioning**: Block opponent's potential 4-in-a-row opportunities
+
+### Files
+- `infiltration.html` - Main game interface
+- `infiltration-engine.js` - Game logic engine
+- `infiltration-test.html` - Comprehensive test suite (all tests pass ✓)
+
+---
 
 ## 📜 License
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Tic-Tac-Toe 2: Infiltration</title>
+  <title>Tic-Tac-Toe 2: Infiltration v1.1</title>
   <style>
     :root {
       --bg: linear-gradient(135deg, #e8f0ff 0%, #fdf6ff 55%, #f4fbff 100%);
@@ -197,14 +197,6 @@
     .cell.x { color: var(--x); text-shadow: 0 2px 6px rgba(27, 110, 243, 0.4); }
     .cell.o { color: var(--o); text-shadow: 0 2px 6px rgba(232, 74, 95, 0.4); }
 
-    .cell.king::after {
-      content: '👑';
-      position: absolute;
-      top: 2px;
-      right: 2px;
-      font-size: 0.5em;
-    }
-
     .cell.valid-placement {
       box-shadow: inset 0 0 0 2px var(--valid-move);
       background: rgba(74, 222, 128, 0.1);
@@ -362,7 +354,7 @@
 </head>
 <body>
   <main class="game" id="game">
-    <h1>🎯 Tic-Tac-Toe 2: Infiltration</h1>
+    <h1>🎯 Tic-Tac-Toe 2: Infiltration v1.1</h1>
 
     <div class="phase-banner" id="phase-banner">Phase 1: Placement</div>
 
@@ -378,13 +370,13 @@
       <div class="info-card">
         <strong>Player X</strong>
         <div class="inventory x" id="inventory-x">
-          <span id="count-x">8</span> pieces
+          <span id="count-x">10</span> pieces
         </div>
       </div>
       <div class="info-card">
         <strong>Player O</strong>
         <div class="inventory o" id="inventory-o">
-          <span id="count-o">8</span> pieces
+          <span id="count-o">10</span> pieces
         </div>
       </div>
     </div>
@@ -403,18 +395,18 @@
     </div>
 
     <div class="config-panel hidden" id="config-panel">
-      <div class="config-title">Game Configuration</div>
+      <div class="config-title">Game Configuration (v1.1)</div>
       <div class="config-options">
         <div class="config-option">
-          <label>Pieces: <input type="number" id="cfg-pieces" min="4" max="16" value="8"></label>
+          <label>Pieces: <input type="number" id="cfg-pieces" min="4" max="16" value="10"></label>
         </div>
         <div class="config-option">
           <input type="checkbox" id="cfg-capture" checked>
           <label for="cfg-capture">Capture</label>
         </div>
         <div class="config-option">
-          <input type="checkbox" id="cfg-kings" checked>
-          <label for="cfg-kings">Kings</label>
+          <input type="checkbox" id="cfg-multi-jump" checked>
+          <label for="cfg-multi-jump">Multi-Jump</label>
         </div>
         <div class="config-option">
           <input type="checkbox" id="cfg-forced-capture">
@@ -449,7 +441,7 @@
     // Config inputs
     const cfgPieces = document.getElementById("cfg-pieces");
     const cfgCapture = document.getElementById("cfg-capture");
-    const cfgKings = document.getElementById("cfg-kings");
+    const cfgMultiJump = document.getElementById("cfg-multi-jump");
     const cfgForcedCapture = document.getElementById("cfg-forced-capture");
     const cfgPie = document.getElementById("cfg-pie");
 
@@ -462,7 +454,7 @@
       const config = {
         pieceCount: parseInt(cfgPieces.value),
         captureEnabled: cfgCapture.checked,
-        kingsEnabled: cfgKings.checked,
+        multiJump: cfgMultiJump.checked,
         forcedCapture: cfgForcedCapture.checked,
         pieRule: cfgPie.checked
       };
@@ -483,13 +475,11 @@
         const coords = game.indexToCoords(i);
         const isDark = (coords.row + coords.col) % 2 === 1;
         const value = game.board[i];
-        const isKing = game.isKing(i);
 
         let classes = ['cell'];
         if (isDark) classes.push('dark');
         if (value) {
           classes.push('filled', value.toLowerCase());
-          if (isKing) classes.push('king');
         } else {
           classes.push('empty');
         }
@@ -550,7 +540,12 @@
         if (selectedPiece !== null) {
           const result = game.movePiece(selectedPiece, index);
           if (result.success) {
-            selectedPiece = null;
+            // Check if multi-jump continuation is available
+            if (result.canContinue) {
+              selectedPiece = result.continueFrom;
+            } else {
+              selectedPiece = null;
+            }
             renderBoard();
             updateUI();
           }
@@ -606,8 +601,10 @@
         statusElement.textContent = `Player ${game.currentPlayer}: Place your pieces in ${game.currentPlayer === 'X' ? 'bottom' : 'top'} half`;
         statusElement.style.color = 'var(--muted)';
       } else if (game.phase === 'movement') {
-        if (selectedPiece !== null) {
-          statusElement.textContent = `Player ${game.currentPlayer}: Select where to move`;
+        if (game.canContinueCapture) {
+          statusElement.textContent = `Player ${game.currentPlayer}: Continue capturing or click piece to select it`;
+        } else if (selectedPiece !== null) {
+          statusElement.textContent = `Player ${game.currentPlayer}: Move to adjacent square or capture by jumping`;
         } else if (game.capturedPieces[game.currentPlayer] > 0) {
           statusElement.textContent = `Player ${game.currentPlayer}: Replace captured piece or move a piece`;
         } else {

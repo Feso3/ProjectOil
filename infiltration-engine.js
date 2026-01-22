@@ -1,11 +1,17 @@
 /**
- * Tic-Tac-Toe 2: Infiltration Game Engine
+ * Tic-Tac-Toe 2: Infiltration Game Engine v1.1
  *
- * A strategic board game combining checkers movement with territorial objectives.
+ * A strategic board game with flexible movement and territorial objectives.
+ *
+ * Version 1.1 Changes:
+ * - Movement: Any adjacent square (8 directions) instead of diagonal forward only
+ * - Captures: Jump 2 squares in any straight line over enemy
+ * - Piece count: 10 pieces per player (up from 8)
+ * - Removed kings system (no longer needed with omnidirectional movement)
  *
  * Game Flow:
- * - Phase 1 (Placement): Players alternate placing pieces on their home half
- * - Phase 2 (Movement): Players move pieces diagonally, capture enemies, and aim for 4-in-a-row
+ * - Phase 1 (Deployment): Players alternate placing 10 pieces on their home half
+ * - Phase 2 (Movement): Players move pieces to adjacent squares or capture by jumping
  *
  * Win Condition: Get 4-in-a-row (H/V/D) entirely in opponent's territory
  */
@@ -19,23 +25,36 @@ class InfiltrationEngine {
     this.EMPTY = "";
     this.PLAYER_X = "X";
     this.PLAYER_O = "O";
+    this.VERSION = "1.1";
 
     // Configuration (tuning knobs)
     this.config = {
-      pieceCount: config.pieceCount || 8,           // Pieces per player
+      pieceCount: config.pieceCount || 10,             // Pieces per player (v1.1: default 10)
       captureEnabled: config.captureEnabled !== false, // Can capture pieces
-      kingsEnabled: config.kingsEnabled !== false,     // Pieces can become kings
       forcedCapture: config.forcedCapture || false,    // Must capture if available
+      multiJump: config.multiJump !== false,           // Allow multiple captures in one turn
       pieRule: config.pieRule || false                 // Second player can swap colors after first placement
     };
 
     // Game phases
     this.PHASE_PLACEMENT = "placement";
     this.PHASE_MOVEMENT = "movement";
-    this.PHASE_PIE_DECISION = "pie_decision"; // After first placement, O decides to swap or not
+    this.PHASE_PIE_DECISION = "pie_decision";
 
     // Territory boundaries
     this.TOP_HALF_MAX_INDEX = 31; // Rows 0-3 (O's home, X's opponent side)
+
+    // All 8 directions (N, NE, E, SE, S, SW, W, NW)
+    this.DIRECTIONS = [
+      { dr: -1, dc: 0 },  // North
+      { dr: -1, dc: 1 },  // Northeast
+      { dr: 0, dc: 1 },   // East
+      { dr: 1, dc: 1 },   // Southeast
+      { dr: 1, dc: 0 },   // South
+      { dr: 1, dc: -1 },  // Southwest
+      { dr: 0, dc: -1 },  // West
+      { dr: -1, dc: -1 }  // Northwest
+    ];
 
     this.reset();
   }
@@ -45,7 +64,6 @@ class InfiltrationEngine {
    */
   reset() {
     this.board = Array(this.CELLS_COUNT).fill(this.EMPTY);
-    this.kings = new Set(); // Indices of promoted pieces
     this.currentPlayer = this.PLAYER_X;
     this.phase = this.PHASE_PLACEMENT;
     this.gameOver = false;
@@ -66,8 +84,10 @@ class InfiltrationEngine {
     };
 
     this.pieRuleUsed = false;
-    this.selectedPiece = null; // For UI: which piece is selected for movement
+    this.selectedPiece = null;
     this.lastMoveWasCapture = false;
+    this.canContinueCapture = false; // For multi-jump
+    this.currentTurnPiece = null; // Track piece making multi-jump
   }
 
   /**
@@ -105,35 +125,6 @@ class InfiltrationEngine {
    */
   isInOpponentTerritory(index, player) {
     return !this.isInHomeTerritory(index, player);
-  }
-
-  /**
-   * Check if a piece is a king
-   */
-  isKing(index) {
-    return this.kings.has(index);
-  }
-
-  /**
-   * Get forward direction for a player (row delta)
-   * X moves up (negative), O moves down (positive)
-   */
-  getForwardDirection(player) {
-    return player === this.PLAYER_X ? -1 : 1;
-  }
-
-  /**
-   * Check if a piece has reached the far edge and should be promoted
-   */
-  shouldPromoteToKing(index, player) {
-    if (!this.config.kingsEnabled) return false;
-
-    const coords = this.indexToCoords(index);
-    if (player === this.PLAYER_X) {
-      return coords.row === 0; // Reached top edge
-    } else {
-      return coords.row === 7; // Reached bottom edge
-    }
   }
 
   /**
@@ -190,10 +181,9 @@ class InfiltrationEngine {
 
     if (allPiecesPlaced) {
       this.phase = this.PHASE_MOVEMENT;
-      // Don't switch player here - keep same player for first move
       return {
         success: true,
-        message: "All pieces placed. Movement phase begins!",
+        message: "All pieces deployed. Movement phase begins!",
         phaseChange: true,
         phase: this.PHASE_MOVEMENT
       };
@@ -217,22 +207,18 @@ class InfiltrationEngine {
       return { success: false, message: "Not in pie rule decision phase" };
     }
 
-    // Swap the piece on the board
     const firstMove = this.moveHistory[0];
     this.board[firstMove.index] = this.PLAYER_O;
 
-    // Swap inventories
     const temp = this.inventory[this.PLAYER_X];
     this.inventory[this.PLAYER_X] = this.inventory[this.PLAYER_O];
     this.inventory[this.PLAYER_O] = temp;
 
-    // Update history
     firstMove.player = this.PLAYER_O;
     firstMove.pieSwapped = true;
 
     this.pieRuleUsed = true;
     this.phase = this.PHASE_PLACEMENT;
-    // X now places (since O used pie rule)
     this.currentPlayer = this.PLAYER_X;
 
     return {
@@ -251,8 +237,6 @@ class InfiltrationEngine {
     }
 
     this.phase = this.PHASE_PLACEMENT;
-    // O continues placing normally (already current player)
-
     return {
       success: true,
       message: "Continuing normally",
@@ -277,8 +261,10 @@ class InfiltrationEngine {
   }
 
   /**
-   * PHASE 2: Get valid moves for a piece
-   * Returns array of { to, type: 'move'|'capture', via: capturedIndex }
+   * PHASE 2 v1.1: Get valid moves for a piece
+   * Standard move: 1 square to any adjacent empty square (8 directions)
+   * Capture: Jump 2 squares in straight line over adjacent enemy into empty
+   * Returns array of { to, type: 'move'|'capture', via: capturedIndex, direction }
    */
   getValidMovesForPiece(fromIndex) {
     if (this.phase !== this.PHASE_MOVEMENT) return [];
@@ -286,47 +272,43 @@ class InfiltrationEngine {
 
     const moves = [];
     const coords = this.indexToCoords(fromIndex);
-    const isKing = this.isKing(fromIndex);
-    const forwardDir = this.getForwardDirection(this.currentPlayer);
 
-    // Determine which directions this piece can move
-    const directions = isKing ? [1, -1] : [forwardDir]; // Kings move both ways
+    // Check all 8 directions
+    for (const dir of this.DIRECTIONS) {
+      // Check adjacent square (1 step)
+      const adj1Row = coords.row + dir.dr;
+      const adj1Col = coords.col + dir.dc;
 
-    for (const rowDir of directions) {
-      for (const colDir of [-1, 1]) { // Left and right
-        const newRow = coords.row + rowDir;
-        const newCol = coords.col + colDir;
+      // Bounds check
+      if (adj1Row < 0 || adj1Row >= this.BOARD_SIZE ||
+          adj1Col < 0 || adj1Col >= this.BOARD_SIZE) {
+        continue;
+      }
 
-        // Check bounds
-        if (newRow < 0 || newRow >= this.BOARD_SIZE ||
-            newCol < 0 || newCol >= this.BOARD_SIZE) {
-          continue;
-        }
+      const adj1Index = this.coordsToIndex(adj1Row, adj1Col);
 
-        const toIndex = this.coordsToIndex(newRow, newCol);
+      // Standard move: adjacent empty square
+      if (this.board[adj1Index] === this.EMPTY) {
+        moves.push({ to: adj1Index, type: 'move', direction: dir });
+      }
+      // Capture: adjacent enemy, check if we can jump
+      else if (this.config.captureEnabled &&
+               this.board[adj1Index] !== this.currentPlayer) {
+        // Check 2 squares away in same direction
+        const adj2Row = coords.row + (dir.dr * 2);
+        const adj2Col = coords.col + (dir.dc * 2);
 
-        // Regular move to empty square
-        if (this.board[toIndex] === this.EMPTY) {
-          moves.push({ to: toIndex, type: 'move' });
-        }
-        // Capture move
-        else if (this.config.captureEnabled &&
-                 this.board[toIndex] !== this.currentPlayer) {
-          // Check if we can jump over enemy
-          const jumpRow = coords.row + (rowDir * 2);
-          const jumpCol = coords.col + (colDir * 2);
+        if (adj2Row >= 0 && adj2Row < this.BOARD_SIZE &&
+            adj2Col >= 0 && adj2Col < this.BOARD_SIZE) {
+          const adj2Index = this.coordsToIndex(adj2Row, adj2Col);
 
-          if (jumpRow >= 0 && jumpRow < this.BOARD_SIZE &&
-              jumpCol >= 0 && jumpCol < this.BOARD_SIZE) {
-            const jumpIndex = this.coordsToIndex(jumpRow, jumpCol);
-
-            if (this.board[jumpIndex] === this.EMPTY) {
-              moves.push({
-                to: jumpIndex,
-                type: 'capture',
-                via: toIndex // The captured piece
-              });
-            }
+          if (this.board[adj2Index] === this.EMPTY) {
+            moves.push({
+              to: adj2Index,
+              type: 'capture',
+              via: adj1Index,
+              direction: dir
+            });
           }
         }
       }
@@ -336,7 +318,7 @@ class InfiltrationEngine {
   }
 
   /**
-   * Get all valid moves for current player (for forced capture check)
+   * Get all valid moves for current player
    */
   getAllValidMoves() {
     const allMoves = [];
@@ -354,17 +336,32 @@ class InfiltrationEngine {
   /**
    * Check if any captures are available
    */
-  hasCaptureAvailable() {
-    const allMoves = this.getAllValidMoves();
-    return allMoves.some(move => move.type === 'capture');
+  hasCaptureAvailable(fromIndex = null) {
+    if (fromIndex !== null) {
+      // Check for specific piece (for multi-jump)
+      const moves = this.getValidMovesForPiece(fromIndex);
+      return moves.some(move => move.type === 'capture');
+    } else {
+      // Check for any capture
+      const allMoves = this.getAllValidMoves();
+      return allMoves.some(move => move.type === 'capture');
+    }
   }
 
   /**
-   * PHASE 2: Move a piece
+   * PHASE 2 v1.1: Move a piece
+   * Supports multi-jump if enabled
    */
   movePiece(fromIndex, toIndex) {
     if (this.phase !== this.PHASE_MOVEMENT) {
       return { success: false, message: "Not in movement phase" };
+    }
+
+    // If multi-jump in progress, only allow moves from the same piece
+    if (this.canContinueCapture && this.currentTurnPiece !== null) {
+      if (fromIndex !== this.currentTurnPiece) {
+        return { success: false, message: "Must continue capturing with the same piece" };
+      }
     }
 
     if (this.board[fromIndex] !== this.currentPlayer) {
@@ -380,7 +377,7 @@ class InfiltrationEngine {
     }
 
     // Forced capture rule
-    if (this.config.forcedCapture && move.type !== 'capture') {
+    if (this.config.forcedCapture && move.type !== 'capture' && !this.canContinueCapture) {
       if (this.hasCaptureAvailable()) {
         return { success: false, message: "Must capture when possible" };
       }
@@ -388,39 +385,25 @@ class InfiltrationEngine {
 
     // Execute the move
     const piece = this.board[fromIndex];
-    const wasKing = this.isKing(fromIndex);
-
     this.board[fromIndex] = this.EMPTY;
     this.board[toIndex] = piece;
 
-    // Update king status
-    if (wasKing) {
-      this.kings.delete(fromIndex);
-      this.kings.add(toIndex);
-    }
-
     let capturedPiece = null;
+    let isCapture = false;
 
     // Handle capture
     if (move.type === 'capture') {
       capturedPiece = this.board[move.via];
       this.board[move.via] = this.EMPTY;
 
-      // Remove king status if captured piece was a king
-      this.kings.delete(move.via);
-
       // Return captured piece to owner's inventory
       this.inventory[capturedPiece]++;
       this.capturedPieces[capturedPiece]++;
 
+      isCapture = true;
       this.lastMoveWasCapture = true;
     } else {
       this.lastMoveWasCapture = false;
-    }
-
-    // Check for king promotion
-    if (!wasKing && this.shouldPromoteToKing(toIndex, this.currentPlayer)) {
-      this.kings.add(toIndex);
     }
 
     this.moveHistory.push({
@@ -429,9 +412,30 @@ class InfiltrationEngine {
       from: fromIndex,
       to: toIndex,
       via: move.via,
-      capturedPiece,
-      promoted: this.isKing(toIndex) && !wasKing
+      capturedPiece
     });
+
+    // Check for multi-jump continuation
+    if (this.config.multiJump && isCapture) {
+      // Check if another capture is available from the landing square
+      if (this.hasCaptureAvailable(toIndex)) {
+        this.canContinueCapture = true;
+        this.currentTurnPiece = toIndex;
+
+        return {
+          success: true,
+          message: "Piece captured! Another capture available.",
+          moveType: 'capture',
+          captured: capturedPiece,
+          canContinue: true,
+          continueFrom: toIndex
+        };
+      }
+    }
+
+    // Reset multi-jump state
+    this.canContinueCapture = false;
+    this.currentTurnPiece = null;
 
     // Check for win
     const winResult = this.checkWin(this.currentPlayer);
@@ -449,14 +453,13 @@ class InfiltrationEngine {
       };
     }
 
-    // Check for stalemate (no valid moves)
+    // Switch players
     this.currentPlayer = this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
 
+    // Check for stalemate
     if (this.getAllValidMoves().length === 0) {
-      // No valid moves - check if they have pieces to place
       if (this.inventory[this.currentPlayer] === 0) {
         this.gameOver = true;
-        // The player who just moved wins by stalemate
         this.winner = this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
         return {
           success: true,
@@ -470,10 +473,44 @@ class InfiltrationEngine {
 
     return {
       success: true,
-      message: move.type === 'capture' ? "Piece captured!" : "Piece moved",
+      message: isCapture ? "Piece captured!" : "Piece moved",
       moveType: move.type,
-      captured: capturedPiece,
-      promoted: this.isKing(toIndex) && !wasKing
+      captured: capturedPiece
+    };
+  }
+
+  /**
+   * End turn (for multi-jump - if player chooses not to continue)
+   */
+  endTurn() {
+    if (!this.canContinueCapture) {
+      return { success: false, message: "No turn to end" };
+    }
+
+    this.canContinueCapture = false;
+    this.currentTurnPiece = null;
+
+    // Check for win
+    const winResult = this.checkWin(this.currentPlayer);
+    if (winResult.isWin) {
+      this.gameOver = true;
+      this.winner = this.currentPlayer;
+      this.winningLine = winResult.line;
+      return {
+        success: true,
+        message: `${this.currentPlayer} wins!`,
+        gameOver: true,
+        winner: this.currentPlayer,
+        winningLine: winResult.line
+      };
+    }
+
+    // Switch players
+    this.currentPlayer = this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
+
+    return {
+      success: true,
+      message: "Turn ended"
     };
   }
 
@@ -497,7 +534,6 @@ class InfiltrationEngine {
       return { success: false, message: "Must place in home territory" };
     }
 
-    // Place the piece
     this.board[index] = this.currentPlayer;
     this.inventory[this.currentPlayer]--;
     this.capturedPieces[this.currentPlayer]--;
@@ -520,7 +556,6 @@ class InfiltrationEngine {
 
   /**
    * Check for win: 4-in-a-row entirely in opponent's territory
-   * (Reusing logic from base game)
    */
   checkWin(player) {
     const directions = [
@@ -535,7 +570,6 @@ class InfiltrationEngine {
         for (const dir of directions) {
           const line = this.checkLineFromPosition(row, col, dir.dr, dir.dc, player);
           if (line && line.length === this.WIN_LENGTH) {
-            // Check if line is entirely in opponent's territory
             if (this.isLineInOpponentTerritory(line, player)) {
               return { isWin: true, line };
             }
@@ -585,8 +619,8 @@ class InfiltrationEngine {
    */
   getState() {
     return {
+      version: this.VERSION,
       board: [...this.board],
-      kings: Array.from(this.kings),
       currentPlayer: this.currentPlayer,
       phase: this.phase,
       gameOver: this.gameOver,
@@ -596,7 +630,9 @@ class InfiltrationEngine {
       capturedPieces: { ...this.capturedPieces },
       moveHistory: [...this.moveHistory],
       config: { ...this.config },
-      pieRuleUsed: this.pieRuleUsed
+      pieRuleUsed: this.pieRuleUsed,
+      canContinueCapture: this.canContinueCapture,
+      currentTurnPiece: this.currentTurnPiece
     };
   }
 }

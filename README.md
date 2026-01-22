@@ -68,12 +68,40 @@ The game begins with a **structured opening** that forces both players to develo
 - Ply 5: X places on X's half
 - Ply 6: O places on X's half
 
-**After Opening**: Each player has exactly **3 pieces** on the board, and the game transitions to the Open Game phase.
+### Coin Toss (Game Start)
 
-### Open Game Phase (After Ply 6)
+At the start of each game:
+- A **random coin toss** determines which player goes first (X or O)
+- The coin toss result is displayed in a modal: "🪙 Coin Toss: Player X goes first!"
+- Click "Start Game" to begin playing
+- This ensures fair gameplay with randomized turn order
 
-After the opening completes:
-- **Placement**: Players can place on any empty square (no territory restrictions)
+### Alternating Active Half (Throughout Game)
+
+The board is divided into two halves, and **only one half is playable at a time**:
+- **X's Half**: Bottom 4 rows (indices 32-63)
+- **O's Half**: Top 4 rows (indices 0-31)
+
+**Rules**:
+- The **active half** alternates every single turn
+- **Initial active half**: The starting player begins by placing in their **opponent's half**
+  - Example: If X wins coin toss, X places first in O's half (top)
+  - This ensures players can build in the territory where they need to win
+- **Only the active half is playable**: Both players must place in whichever half is currently active
+- **Visual feedback**: The inactive half is grayed out and non-interactive
+- **Active half display**: UI shows "Active Half: X's Side (Bottom)" or "O's Side (Top)"
+
+**Alternation Pattern** (if X wins coin toss):
+1. Turn 1 (X's turn, O's half active): X places in O's half → active toggles to X's half
+2. Turn 2 (O's turn, X's half active): O places in X's half → active toggles to O's half
+3. Turn 3 (X's turn, O's half active): X places in O's half → active toggles to X's half
+4. Turn 4 (O's turn, X's half active): O places in X's half → active toggles to O's half
+5. ...continues alternating
+
+**Strategic Implication**: Each player places in their opponent's territory (where they need to win), then their own territory (where opponent tries to win), then back to opponent's territory, etc.
+
+### FIFO Cap
+
 - **Piece Limit**: Each player may have at most **MAX_ON_BOARD_PER_PLAYER = 8** pieces (configurable)
 - **FIFO Removal**: When placing a 9th piece, your **oldest piece** is **automatically removed** (First In, First Out)
 
@@ -81,29 +109,33 @@ After the opening completes:
 - Pieces are tracked by placement order (plyIndex)
 - When you exceed the cap (8 pieces), your oldest piece is removed
 - The just-placed piece is never removed
-- UI shows a preview highlight on the piece that will be removed before you place
+- UI shows warning highlights on pieces approaching removal
 
 #### Resolution Order (Critical!)
-When you place a piece during Open Game, the following happens **in this exact order**:
+When you place a piece, the following happens **in this exact order**:
 
-1. **Place** your piece on the board
+1. **Place** your piece in the active half
 2. **FIFO Removal** (if you now have 9 pieces, remove oldest)
 3. **Win Check** (4-in-a-row validation after removal)
-4. **Turn Switch** (if no win)
+4. **Active Half Toggle** (switches to opposite half)
+5. **Turn Switch** (if no win)
 
 **Why this order matters**: FIFO removal happens BEFORE win detection, so your win condition is checked with the final board state (after removal).
 
 ### Gameplay Summary
-- **Opening (Plies 1-6)**: Follow structured placement pattern (see above)
-- **Open Game (Ply 7+)**: Place anywhere, FIFO removal at 9 pieces
+- **Coin Toss**: Randomly determines starting player
+- **Alternating Halves**: Active half alternates every turn, controlling where pieces can be placed
+- **FIFO Cap**: Maximum 8 pieces per player, oldest removed when exceeded
 - **UI Features**:
-  - Phase indicator shows "Opening (Step X/6)" or "Open Game"
+  - Coin toss modal at game start
+  - Active half indicator shows which side is playable
+  - Inactive half is grayed out and non-interactive
   - Per-player counters show piece count (e.g., "X: 7/8")
   - **FIFO Visibility** (see below for details):
     - Color-coded warning highlights (RED = next removed, ORANGE = removed after next)
     - Hover preview shows which piece will be removed when placing a move
     - Visual legend explains color meanings
-  - Move history marks opening moves with 🔷 and FIFO removals with [FIFO]
+  - Move history marks FIFO removals with [FIFO]
 - **Win**: First player to get 4-in-a-row entirely in opponent's territory wins
 
 ### FIFO Visibility Features
@@ -140,29 +172,40 @@ These features make FIFO removal transparent and help players strategize around 
 
 ### Example Scenarios
 
-**Scenario 1: Opening Phase Restrictions**
-- **Ply 1** (X's turn): X can only place on rows 5-8 (X's half). Placing on rows 1-4 is invalid.
-- **Ply 3** (X's turn): X can only place on rows 1-4 (O's half). Placing on rows 5-8 is invalid.
-- **Ply 7** (X's turn, Open Game): X can place anywhere on any empty square.
+**Scenario 1: Coin Toss and Initial Placement**
+- Coin toss result: X goes first
+- Initial active half: O's half (top, rows 1-4)
+- **Ply 1** (X's turn, O's half active): X places in O's half (e.g., index 10)
+- Active half toggles to X's half
+- **Ply 2** (O's turn, X's half active): O places in X's half (e.g., index 40)
+- Active half toggles back to O's half
 
-**Scenario 2: FIFO Removal at Cap**
+**Scenario 2: Alternating Half Restriction**
+- Current turn: X's turn
+- Active half: X's half (bottom, rows 5-8)
+- **Valid moves**: Any empty square in indices 32-63 (X's half)
+- **Invalid moves**: Any square in indices 0-31 (O's half - grayed out)
+- After X places, active half toggles to O's half for next turn
+
+**Scenario 3: FIFO Removal at Cap**
 - X has 8 pieces on board (at cap: 8/8)
-- X's oldest piece was placed on ply 0 at index 40
-- X places a 9th piece at index 20
-- **Result**: Oldest piece (index 40, ply 0) is automatically removed
+- X's oldest piece was placed on ply 0 at index 10 (in O's half)
+- X places a 9th piece at index 15 (in O's half, when O's half is active)
+- **Result**: Oldest piece (index 10, ply 0) is automatically removed
 - Net effect: X still has 8 pieces (7 old + 1 new)
 
-**Scenario 3: Win Detection After FIFO**
-- O has 8 pieces including 3-in-a-row at indices 0, 1, 2 (in X's half)
-- O places 9th piece at index 3, completing 4-in-a-row (0-1-2-3)
-- O's oldest piece (from ply 1) is removed by FIFO
-- **Result**: Win is detected after FIFO removal (4-in-a-row still intact at 0-1-2-3)
+**Scenario 4: Win Detection with Alternating Halves**
+- X has built 3-in-a-row at indices 0, 1, 2 (in O's half - where X needs to win)
+- Current turn: X's turn, O's half is active
+- X places at index 3, completing 4-in-a-row (0-1-2-3) in O's territory
+- **Result**: X wins! 4-in-a-row entirely in opponent's half
 
-**Scenario 4: FIFO Preview Highlight**
+**Scenario 5: FIFO Warning Highlights**
 - X has 8 pieces (at cap: 8/8)
-- X's oldest piece is at index 45 (placed on ply 0)
-- When hovering over the board, index 45 shows orange border (FIFO preview)
-- This tells X: "If you place now, this piece will be removed"
+- X's oldest piece is at index 10 (RED highlight - next to be removed)
+- X's second-oldest piece is at index 15 (ORANGE highlight - removed after next)
+- When X places a 9th piece, index 10 will be removed
+- FIFO warnings remain visible throughout the game once enabled
 
 ### CPU Player (Computer Opponent)
 

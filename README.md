@@ -30,10 +30,10 @@ Strategic board game with flexible movement and territorial conquest.
 
 ---
 
-### 2. **Checkerboard Tic-Tac-Toe (vNext with FIFO Caps)**
-A strategic twist on classic tic-tac-toe with territorial gameplay, total piece limits, and invasion penalties on an 8×8 checkered board.
+### 2. **Checkerboard Tic-Tac-Toe (Staged Opening + FIFO)**
+A strategic twist on classic tic-tac-toe with a structured opening phase and FIFO-based piece limits on an 8×8 checkered board.
 
-## 🎮 Game Rules (vNext)
+## 🎮 Game Rules (Staged Opening + FIFO)
 
 ### Objective
 Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your opponent's side** of the board.
@@ -52,69 +52,82 @@ Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your oppon
 - A 4-in-a-row that crosses the boundary does **not** count as a win
 - A 4-in-a-row in your own territory does **not** count as a win
 
-### New Rules: FIFO-Based Caps (vNext)
+### Staged Opening Phase (6 Plies)
 
-#### A) Total On-Board Cap (Default: 15)
-Each player may have at most **TOTAL_CAP = 15** pieces on the board at any time.
+The game begins with a **structured opening** that forces both players to develop pieces on specific halves:
 
-- **Trigger**: If placing a piece would cause you to exceed 15 total pieces
-- **Automatic removal**: Your **OLDEST piece on your HOME half** is automatically removed (FIFO)
-- **Fallback**: If you have NO pieces on your home half, your **oldest piece anywhere** is removed
+**Round 1 (Plies 1-2)**: Both players place on **X's half** (bottom, rows 5-8)
+- Ply 1: X places on X's half
+- Ply 2: O places on X's half
 
-#### B) Opponent-Half Invasion Cap + Penalty (Default: 8)
-Each player may have at most **INVASION_CAP = 8** pieces on the opponent's half at any time.
+**Round 2 (Plies 3-4)**: Both players place on **O's half** (top, rows 1-4)
+- Ply 3: X places on O's half
+- Ply 4: O places on O's half
 
-- **Trigger**: If placing a piece **on opponent's half** causes you to exceed 8 invasion pieces
-- **Automatic penalty**: Your **OLDEST piece on your HOME half** is automatically removed (FIFO)
-- **Fallback**: If you have NO pieces on your home half, your **oldest piece anywhere** is removed
-- **Important**: The penalty removes from your HOME half, not opponent half (strategic consequence)
+**Round 3 (Plies 5-6)**: Both players place on **X's half** again
+- Ply 5: X places on X's half
+- Ply 6: O places on X's half
+
+**After Opening**: Each player has exactly **3 pieces** on the board, and the game transitions to the Open Game phase.
+
+### Open Game Phase (After Ply 6)
+
+After the opening completes:
+- **Placement**: Players can place on any empty square (no territory restrictions)
+- **Piece Limit**: Each player may have at most **MAX_ON_BOARD_PER_PLAYER = 8** pieces (configurable)
+- **FIFO Removal**: When placing a 9th piece, your **oldest piece** is **automatically removed** (First In, First Out)
+
+**FIFO Behavior**:
+- Pieces are tracked by placement order (plyIndex)
+- When you exceed the cap (8 pieces), your oldest piece is removed
+- The just-placed piece is never removed
+- UI shows a preview highlight on the piece that will be removed before you place
 
 #### Resolution Order (Critical!)
-When you place a piece, the following happens **in this exact order**:
+When you place a piece during Open Game, the following happens **in this exact order**:
 
 1. **Place** your piece on the board
-2. **Invasion Penalty** (if you exceeded invasion cap on opponent half)
-3. **Total Cap** (if you exceeded total cap anywhere)
-4. **Win Check** (4-in-a-row validation)
-5. **Turn Switch** (if no win)
+2. **FIFO Removal** (if you now have 9 pieces, remove oldest)
+3. **Win Check** (4-in-a-row validation after removal)
+4. **Turn Switch** (if no win)
 
-**Why this order matters**: You cannot "momentarily" exceed caps to claim a win. Caps are enforced BEFORE win detection.
+**Why this order matters**: FIFO removal happens BEFORE win detection, so your win condition is checked with the final board state (after removal).
 
-### Gameplay
-- Players alternate turns placing their piece (X or O) on any empty square
-- Automatic removals happen immediately after placement (no player choice)
-- UI shows which pieces were removed and why (Invasion Penalty vs Total Cap)
-- After all removals and win check, turn switches to other player
-- Game ends when a player achieves valid 4-in-a-row or board is full (draw)
+### Gameplay Summary
+- **Opening (Plies 1-6)**: Follow structured placement pattern (see above)
+- **Open Game (Ply 7+)**: Place anywhere, FIFO removal at 9 pieces
+- **UI Features**:
+  - Phase indicator shows "Opening (Step X/6)" or "Open Game"
+  - Per-player counters show piece count (e.g., "X: 7/8")
+  - Orange highlight preview shows which piece will be removed if you're at cap
+  - Move history marks opening moves with 🔷 and FIFO removals with [FIFO]
+- **Win**: First player to get 4-in-a-row entirely in opponent's territory wins
 
 ### Example Scenarios
 
-**Scenario 1: Total Cap Exceeded**
-- You have 15 pieces on board (10 home, 5 opponent)
-- You place 16th piece on home half
-- **Result**: Your oldest home piece (1st placed) is automatically removed
-- Net effect: Still 15 total (9 home, 5 opponent + new piece)
+**Scenario 1: Opening Phase Restrictions**
+- **Ply 1** (X's turn): X can only place on rows 5-8 (X's half). Placing on rows 1-4 is invalid.
+- **Ply 3** (X's turn): X can only place on rows 1-4 (O's half). Placing on rows 5-8 is invalid.
+- **Ply 7** (X's turn, Open Game): X can place anywhere on any empty square.
 
-**Scenario 2: Invasion Penalty**
-- You have 12 pieces (4 home, 8 opponent) - at invasion cap
-- You place 9th piece on opponent half
-- **Result**: Your oldest HOME piece is automatically removed as penalty
-- Net effect: 11 total (3 home, 8 opponent + new piece)
+**Scenario 2: FIFO Removal at Cap**
+- X has 8 pieces on board (at cap: 8/8)
+- X's oldest piece was placed on ply 0 at index 40
+- X places a 9th piece at index 20
+- **Result**: Oldest piece (index 40, ply 0) is automatically removed
+- Net effect: X still has 8 pieces (7 old + 1 new)
 
-**Scenario 3: Both Caps Exceeded**
-- You have 15 pieces (2 home, 13 opponent) - ridiculous invasion!
-- You place 16th piece on opponent half
-- **Resolution**:
-  1. Place piece → 16 total, 14 invasion
-  2. Invasion penalty → Remove oldest home → 15 total, 14 invasion
-  3. Total cap (if still exceeded) → Remove oldest home (or fallback) → 14 total, 14 invasion
-- Note: Invasion penalty triggers first, then total cap
+**Scenario 3: Win Detection After FIFO**
+- O has 8 pieces including 3-in-a-row at indices 0, 1, 2 (in X's half)
+- O places 9th piece at index 3, completing 4-in-a-row (0-1-2-3)
+- O's oldest piece (from ply 1) is removed by FIFO
+- **Result**: Win is detected after FIFO removal (4-in-a-row still intact at 0-1-2-3)
 
-**Scenario 4: Win After Removal**
-- You have 3 pieces on opponent half in positions (0, 1, 2) - 3-in-a-row
-- You place 4th piece at position 3 → 4-in-a-row complete!
-- But this exceeds invasion cap, so oldest home piece removed first
-- **Result**: Win is still detected after removal (4-in-a-row intact)
+**Scenario 4: FIFO Preview Highlight**
+- X has 8 pieces (at cap: 8/8)
+- X's oldest piece is at index 45 (placed on ply 0)
+- When hovering over the board, index 45 shows orange border (FIFO preview)
+- This tells X: "If you place now, this piece will be removed"
 
 ## 🚀 How to Play
 
@@ -165,18 +178,18 @@ The project follows a clean separation of concerns:
 - **Pure logic** with no DOM/UI dependencies
 - Deterministic and fully testable
 - Key methods:
-  - `applyMove(index)`: Apply move with automatic FIFO cap enforcement
-  - `checkWin(player)`: Validate 4-in-a-row with territory constraint
+  - `applyMove(index)`: Apply move with phase validation and automatic FIFO removal
+  - `getRequiredHalfForOpening()`: Returns required half ('X' or 'O') for current opening ply
+  - `isValidMove(index)`: Check if move is valid for current phase (opening restrictions or open game)
+  - `findOldestPiece(player)`: Find oldest piece by plyIndex for FIFO removal
+  - `getPieceToRemovePreview(player)`: Get piece that would be removed if player places now (for UI preview)
+  - `countPlayerPieces(player)`: Count total pieces for player on board
+  - `checkWin(player)`: Validate 4-in-a-row entirely in opponent's half
   - `isInOpponentHalf(index, player)`: Check if position is in opponent territory
-  - `isInHomeHalf(index, player)`: Check if position is in home territory
-  - `countTotalPieces(player)`: Count total pieces on board
-  - `countPiecesOnOpponentHalf(player)`: Count pieces in opponent territory
-  - `countPiecesOnHomeHalf(player)`: Count pieces in home territory
-  - `findOldestPiece(player, preferHome)`: Find oldest piece for FIFO removal
-  - `removeOldestFromHome(player, reason)`: Automatic FIFO removal
-  - `getValidMoves()`: Get all available positions
-  - `reset()`: Start a new game
-  - `getState()`/`loadState()`: Save/restore game state
+  - `isInXHalf(index)` / `isInOHalf(index)`: Check territory by half
+  - `getValidMoves()`: Get all valid empty positions for current phase
+  - `reset()`: Start a new game (opening phase)
+  - `getState()`/`loadState()`: Save/restore game state including phase and pieceData
 
 ### UI Layer (`checkerboard-tictactoe.html`)
 - Renders the 8×8 checkered board
@@ -204,18 +217,18 @@ The test suite validates:
 ❌ **3-in-a-row** without 4th piece (no false positives)
 ❌ **Disconnected pieces** (gaps in the line)
 
-**FIFO-Based Caps Tests (vNext):**
-✅ **Total cap at 15** enforced correctly
-✅ **Total cap exceeded** triggers automatic FIFO removal from home
-✅ **Invasion cap at 8** triggers automatic penalty removal from home
-✅ **FIFO selection** removes oldest piece by placement order
-✅ **Fallback to oldest-anywhere** when no home pieces exist
-✅ **Resolution order** invasion penalty → total cap → win check
-✅ **Win detection** occurs after all cap removals
-✅ **Configurable caps** totalCap and invasionCap
-✅ **Placement order tracking** with pieceData array
-✅ **Removal reasons** tracked (invasion_penalty vs total_cap)
-✅ **Independent tracking** per player
+**Staged Opening + FIFO Tests:**
+✅ **Opening phase initialization** starts at ply 0 in OPENING phase
+✅ **Opening restrictions** enforce correct halves for plies 0-1 (X half), 2-3 (O half), 4-5 (X half)
+✅ **Invalid opening moves** correctly rejected (wrong half for current ply)
+✅ **Phase transition** to OPEN_GAME after ply 6
+✅ **FIFO removal** triggers when placing 9th piece (exceeds MAX_ON_BOARD_PER_PLAYER)
+✅ **FIFO selection** removes oldest piece by plyIndex (placement order)
+✅ **Win detection after FIFO** validates 4-in-a-row after removal completes
+✅ **FIFO preview** correctly identifies piece to be removed before placement
+✅ **Configurable maxOnBoard** allows custom piece limits (default: 8)
+✅ **Placement order tracking** with pieceData array storing {player, plyIndex}
+✅ **Independent piece counting** per player with separate caps
 
 ## 🔮 Future Enhancements
 

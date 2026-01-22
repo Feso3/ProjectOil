@@ -623,176 +623,208 @@
       assertEquals(validMoves.length, 64 - moveCount, 'Valid moves should decrease');
     });
 
-    // FIFO-based caps tests
-    runner.section('FIFO-Based Caps (vNext)');
+    // Staged Opening + FIFO tests
+    runner.section('Staged Opening + FIFO');
 
-    runner.test('Total cap at 15 is enforced correctly', () => {
-      const game = new GameEngine({ totalCap: 15 });
-      assertEquals(game.TOTAL_CAP, 15, 'Total cap should be 15');
-
-      // Place 15 pieces for X (should work without removal)
-      for (let i = 0; i < 15; i++) {
-        game.applyMove(32 + i); // X in home half (indices 32-46)
-        game.applyMove(i);      // O in their home half
-      }
-
-      assertEquals(game.countTotalPieces('X'), 15, 'X should have 15 pieces total');
-      assertEquals(game.countTotalPieces('O'), 15, 'O should have 15 pieces total');
+    runner.test('Opening phase starts correctly', () => {
+      const game = new GameEngine();
+      assertEquals(game.phase, game.PHASE_OPENING, 'Should start in OPENING phase');
+      assertEquals(game.plyCount, 0, 'Should start at ply 0');
+      assertEquals(game.OPENING_PLIES, 6, 'Default opening should be 6 plies');
     });
 
-    runner.test('Total cap exceeded triggers automatic FIFO removal from home', () => {
-      const game = new GameEngine({ totalCap: 3 });
+    runner.test('Opening ply 0-1: Must place on X half', () => {
+      const game = new GameEngine();
 
-      // X places 3 in home half
-      game.applyMove(32); // X home, turn 0
-      game.applyMove(0);  // O
-      game.applyMove(33); // X home, turn 2
-      game.applyMove(1);  // O
-      game.applyMove(34); // X home, turn 4 (at cap 3/3)
-      game.applyMove(2);  // O
+      // Ply 0: X must place on X's half (indices 32-63)
+      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 0 requires X half');
+      const validInXHalf = game.isValidMove(40); // X's half
+      const invalidInOHalf = game.isValidMove(10); // O's half
+      assert(validInXHalf, 'X half should be valid for ply 0');
+      assert(!invalidInOHalf, 'O half should be invalid for ply 0');
 
-      // X places 4th piece (exceeds total cap)
-      const result = game.applyMove(35); // X home, turn 6 (would be 4/3)
+      game.applyMove(40); // X places on X's half
+
+      // Ply 1: O must also place on X's half
+      assertEquals(game.plyCount, 1, 'Should be ply 1');
+      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 1 requires X half');
+      const validInXHalf2 = game.isValidMove(45); // X's half
+      const invalidInOHalf2 = game.isValidMove(5); // O's half
+      assert(validInXHalf2, 'X half should be valid for ply 1');
+      assert(!invalidInOHalf2, 'O half should be invalid for ply 1');
+    });
+
+    runner.test('Opening ply 2-3: Must place on O half', () => {
+      const game = new GameEngine();
+
+      game.applyMove(40); // Ply 0: X on X's half
+      game.applyMove(45); // Ply 1: O on X's half
+
+      // Ply 2: X must place on O's half (indices 0-31)
+      assertEquals(game.plyCount, 2, 'Should be ply 2');
+      assertEquals(game.getRequiredHalfForOpening(), 'O', 'Ply 2 requires O half');
+      const validInOHalf = game.isValidMove(10); // O's half
+      const invalidInXHalf = game.isValidMove(50); // X's half
+      assert(validInOHalf, 'O half should be valid for ply 2');
+      assert(!invalidInXHalf, 'X half should be invalid for ply 2');
+
+      game.applyMove(10); // X places on O's half
+
+      // Ply 3: O must also place on O's half
+      assertEquals(game.plyCount, 3, 'Should be ply 3');
+      assertEquals(game.getRequiredHalfForOpening(), 'O', 'Ply 3 requires O half');
+    });
+
+    runner.test('Opening ply 4-5: Must place on X half again', () => {
+      const game = new GameEngine();
+
+      game.applyMove(40); // Ply 0: X on X's half
+      game.applyMove(45); // Ply 1: O on X's half
+      game.applyMove(10); // Ply 2: X on O's half
+      game.applyMove(15); // Ply 3: O on O's half
+
+      // Ply 4: X must place on X's half
+      assertEquals(game.plyCount, 4, 'Should be ply 4');
+      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 4 requires X half');
+
+      game.applyMove(50); // X on X's half
+
+      // Ply 5: O must also place on X's half
+      assertEquals(game.plyCount, 5, 'Should be ply 5');
+      assertEquals(game.getRequiredHalfForOpening(), 'X', 'Ply 5 requires X half');
+    });
+
+    runner.test('Phase transitions to OPEN_GAME after ply 6', () => {
+      const game = new GameEngine();
+
+      game.applyMove(40); // Ply 0: X on X's half
+      game.applyMove(45); // Ply 1: O on X's half
+      game.applyMove(10); // Ply 2: X on O's half
+      game.applyMove(15); // Ply 3: O on O's half
+      game.applyMove(50); // Ply 4: X on X's half
+      game.applyMove(55); // Ply 5: O on X's half
+
+      assertEquals(game.phase, game.PHASE_OPEN_GAME, 'Should transition to OPEN_GAME after ply 5');
+      assertEquals(game.plyCount, 6, 'Should be ply 6');
+      assertEquals(game.countPlayerPieces('X'), 3, 'X should have 3 pieces');
+      assertEquals(game.countPlayerPieces('O'), 3, 'O should have 3 pieces');
+
+      // Now can place anywhere
+      const anywhereValid1 = game.isValidMove(0); // O's half
+      const anywhereValid2 = game.isValidMove(32); // X's half
+      assert(anywhereValid1 && anywhereValid2, 'Can place anywhere in OPEN_GAME');
+    });
+
+    runner.test('FIFO removal triggers when placing 9th piece', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X
+      game.applyMove(45); // O
+      game.applyMove(10); // X
+      game.applyMove(15); // O
+      game.applyMove(50); // X
+      game.applyMove(55); // O
+
+      // X has 3 pieces (ply 0, 2, 4): indices 40, 10, 50
+      // X places 4th piece -> should FIFO remove ply 0 (index 40)
+      const result = game.applyMove(20); // X places 4th
+
       assert(result.success, 'Move should succeed');
-      assert(result.autoRemovals && result.autoRemovals.length > 0, 'Should have auto-removal');
-      assertEquals(result.autoRemovals[0].reason, 'total_cap', 'Removal reason should be total_cap');
-      assertEquals(result.autoRemovals[0].index, 32, 'Should remove oldest piece (index 32, turn 0)');
-
-      // After removal, X should have 3 pieces
-      assertEquals(game.countTotalPieces('X'), 3, 'X should have 3 pieces after removal');
-      assertEquals(game.board[32], game.EMPTY, 'Oldest piece should be removed');
-      assertEquals(game.board[35], 'X', 'Newest piece should remain');
+      assertEquals(result.fifoRemoved, 40, 'Should remove oldest piece (index 40)');
+      assertEquals(game.board[40], game.EMPTY, 'Oldest piece should be removed');
+      assertEquals(game.board[20], 'X', 'New piece should be placed');
+      assertEquals(game.countPlayerPieces('X'), 3, 'X should still have 3 pieces after FIFO');
     });
 
-    runner.test('Invasion cap exceeded triggers automatic FIFO removal from home', () => {
-      const game = new GameEngine({ invasionCap: 3 });
+    runner.test('FIFO removes oldest by plyIndex', () => {
+      const game = new GameEngine({ maxOnBoard: 8 });
 
-      // X places 1 in home, 3 on opponent half
-      game.applyMove(32); // X home, turn 0
-      game.applyMove(0);  // O
-      game.applyMove(1);  // X opponent, turn 2
-      game.applyMove(16); // O
-      game.applyMove(2);  // X opponent, turn 4
-      game.applyMove(17); // O
-      game.applyMove(3);  // X opponent, turn 6 (at invasion cap 3/3)
-      game.applyMove(18); // O
+      // Complete opening
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
 
-      // X places 4th piece on opponent half (exceeds invasion cap)
-      const result = game.applyMove(4); // X opponent, turn 8 (would be 4/3 invasion)
-      assert(result.success, 'Move should succeed');
-      assert(result.autoRemovals && result.autoRemovals.length > 0, 'Should have auto-removal');
-      assertEquals(result.autoRemovals[0].reason, 'invasion_penalty', 'Removal reason should be invasion_penalty');
-      assertEquals(result.autoRemovals[0].index, 32, 'Should remove oldest HOME piece (index 32, turn 0)');
+      // X places 5 more to reach 8 (indices: 40, 10, 50, then 20, 21, 22, 23, 24)
+      game.applyMove(20); // X, ply 6
+      game.applyMove(25); // O, ply 7
+      game.applyMove(21); // X, ply 8
+      game.applyMove(26); // O, ply 9
+      game.applyMove(22); // X, ply 10
+      game.applyMove(27); // O, ply 11
+      game.applyMove(23); // X, ply 12
+      game.applyMove(28); // O, ply 13
+      game.applyMove(24); // X, ply 14 (8th piece)
 
-      // After removal, X should have 3 pieces on opponent half
-      assertEquals(game.countPiecesOnOpponentHalf('X'), 3, 'X should have 3 on opponent half after penalty');
-      assertEquals(game.board[32], game.EMPTY, 'Oldest home piece should be removed');
-      assertEquals(game.board[4], 'X', 'Newest opponent half piece should remain');
+      // X places 9th -> should remove oldest (ply 0, index 40)
+      const result = game.applyMove(30); // X, ply 16
+      assertEquals(result.fifoRemoved, 40, 'Should remove ply 0 piece (oldest)');
     });
 
-    runner.test('FIFO removal fallback to oldest-anywhere if no home pieces', () => {
-      const game = new GameEngine({ invasionCap: 2 });
+    runner.test('Win detection occurs after FIFO removal', () => {
+      const game = new GameEngine({ maxOnBoard: 4 });
 
-      // X places all pieces on opponent half (no home pieces)
-      game.applyMove(0);  // X opponent, turn 0
-      game.applyMove(32); // O
-      game.applyMove(1);  // X opponent, turn 2
-      game.applyMove(33); // O
+      // Complete opening
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(0);  // X, ply 2 - start of potential win line
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
 
-      // X places 3rd piece on opponent half (exceeds invasion cap, but has no home pieces)
-      const result = game.applyMove(2); // X opponent, turn 4 (3/2 invasion, no home)
-      assert(result.success, 'Move should succeed');
-      assert(result.autoRemovals && result.autoRemovals.length > 0, 'Should have auto-removal');
-      assertEquals(result.autoRemovals[0].index, 0, 'Should fallback to oldest anywhere (index 0, turn 0)');
+      // X builds 4-in-a-row in O's half: 0,1,2,3
+      game.applyMove(1);  // X, ply 6
+      game.applyMove(16); // O, ply 7
+      game.applyMove(2);  // X, ply 8 (4th piece, at cap)
+      game.applyMove(17); // O, ply 9
 
-      assertEquals(game.board[0], game.EMPTY, 'Oldest piece anywhere should be removed');
-      assertEquals(game.board[2], 'X', 'Newest piece should remain');
-      assertEquals(game.countPiecesOnOpponentHalf('X'), 2, 'X should have 2 on opponent half');
-    });
+      // X places 5th piece to exceed cap and complete win
+      // X has pieces at: 40, 0, 50, 1, 2 (cap is 4, so oldest 40 will be removed)
+      // After FIFO, X has: 0, 50, 1, 2 - no 4-in-a-row yet
+      game.applyMove(3);  // X, ply 10 - completes 0,1,2,3 but also exceeds cap
 
-    runner.test('Resolution order: invasion penalty before total cap', () => {
-      const game = new GameEngine({ totalCap: 5, invasionCap: 3 });
-
-      // X places 2 home, 3 opponent (5 total, 3 invasion - at both caps)
-      game.applyMove(32); // X home, turn 0
-      game.applyMove(0);  // O
-      game.applyMove(33); // X home, turn 2
-      game.applyMove(16); // O
-      game.applyMove(1);  // X opponent, turn 4
-      game.applyMove(17); // O
-      game.applyMove(2);  // X opponent, turn 6
-      game.applyMove(18); // O
-      game.applyMove(3);  // X opponent, turn 8 (5 total, 3 invasion - at both caps)
-      game.applyMove(19); // O
-
-      // X places on opponent half (exceeds both caps)
-      const result = game.applyMove(4); // X opponent, turn 10 (would be 6 total, 4 invasion)
-      assert(result.success, 'Move should succeed');
-      assertEquals(result.autoRemovals.length, 2, 'Should have 2 auto-removals');
-
-      // First removal should be invasion penalty (oldest home: 32)
-      assertEquals(result.autoRemovals[0].reason, 'invasion_penalty', 'First removal: invasion penalty');
-      assertEquals(result.autoRemovals[0].index, 32, 'First removal: index 32');
-
-      // Second removal should be total cap (oldest home remaining: 33)
-      assertEquals(result.autoRemovals[1].reason, 'total_cap', 'Second removal: total cap');
-      assertEquals(result.autoRemovals[1].index, 33, 'Second removal: index 33');
-
-      // Final counts
-      assertEquals(game.countTotalPieces('X'), 4, 'X should have 4 total after both removals');
-      assertEquals(game.countPiecesOnOpponentHalf('X'), 4, 'X should have 4 on opponent half');
-    });
-
-    runner.test('Win detection occurs after all cap removals', () => {
-      const game = new GameEngine({ invasionCap: 3 });
-
-      // Set up potential win scenario
-      // X has 1 home, 3 opponent (including 3 in a row)
-      game.applyMove(32); // X home, turn 0
-      game.applyMove(16); // O
-      game.applyMove(0);  // X opponent, turn 2
-      game.applyMove(17); // O
-      game.applyMove(1);  // X opponent, turn 4
-      game.applyMove(18); // O
-      game.applyMove(2);  // X opponent, turn 6 (has 3 in row: 0,1,2)
-      game.applyMove(19); // O
-
-      // X places 4th on opponent to complete 4-in-row (also exceeds invasion cap)
-      const result = game.applyMove(3); // X opponent, turn 8 (4 in row: 0,1,2,3 + exceeds invasion)
-
-      // Invasion penalty removes oldest home (32), but 4-in-row remains
-      assert(result.autoRemovals && result.autoRemovals.length === 1, 'Should have 1 auto-removal');
-      assertEquals(result.autoRemovals[0].index, 32, 'Home piece removed');
-
-      // Win should be detected after removal
-      assert(result.gameOver, 'Game should be over');
+      // FIFO removes oldest (ply 0, index 40)
+      // After removal: X has 0, 1, 2, 3 (4 pieces) - this IS a 4-in-a-row!
+      const result = game.applyMove(3);
+      assertEquals(result.fifoRemoved, 40, 'Should FIFO remove index 40');
+      assert(result.gameOver, 'Game should be over after FIFO - 4 in a row');
       assertEquals(result.winner, 'X', 'X should win');
       assertArrayEquals(result.winningLine, [0, 1, 2, 3], 'Winning line should be 0,1,2,3');
     });
 
-    runner.test('Caps are configurable', () => {
-      const game1 = new GameEngine({ totalCap: 20, invasionCap: 10 });
-      assertEquals(game1.TOTAL_CAP, 20, 'Total cap should be configurable');
-      assertEquals(game1.INVASION_CAP, 10, 'Invasion cap should be configurable');
+    runner.test('FIFO preview identifies correct piece', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
 
-      const game2 = new GameEngine(); // Defaults
-      assertEquals(game2.TOTAL_CAP, 15, 'Default total cap should be 15');
-      assertEquals(game2.INVASION_CAP, 8, 'Default invasion cap should be 8');
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X has 3 pieces at cap
+      // Preview should show oldest piece (ply 0, index 40)
+      const preview = game.getPieceToRemovePreview('X');
+      assertEquals(preview, 40, 'Preview should identify oldest piece (index 40)');
+
+      // O also has 3 pieces, preview should show ply 1, index 45
+      const oPreview = game.getPieceToRemovePreview('O');
+      assertEquals(oPreview, 45, 'Preview should identify oldest O piece (index 45)');
     });
 
-    runner.test('Placement order tracked correctly for FIFO', () => {
-      const game = new GameEngine();
+    runner.test('Config: maxOnBoard is customizable', () => {
+      const game1 = new GameEngine({ maxOnBoard: 5 });
+      assertEquals(game1.MAX_ON_BOARD_PER_PLAYER, 5, 'Max should be configurable to 5');
 
-      game.applyMove(0);  // X, turn 0
-      game.applyMove(32); // O, turn 1
-      game.applyMove(1);  // X, turn 2
-      game.applyMove(33); // O, turn 3
+      const game2 = new GameEngine({ maxOnBoard: 10 });
+      assertEquals(game2.MAX_ON_BOARD_PER_PLAYER, 10, 'Max should be configurable to 10');
 
-      // Verify pieceData tracking
-      assert(game.pieceData[0] && game.pieceData[0].turnIndex === 0, 'Index 0 should have turn 0');
-      assert(game.pieceData[32] && game.pieceData[32].turnIndex === 1, 'Index 32 should have turn 1');
-      assert(game.pieceData[1] && game.pieceData[1].turnIndex === 2, 'Index 1 should have turn 2');
-      assert(game.pieceData[33] && game.pieceData[33].turnIndex === 3, 'Index 33 should have turn 3');
+      const game3 = new GameEngine(); // Default
+      assertEquals(game3.MAX_ON_BOARD_PER_PLAYER, 8, 'Default max should be 8');
     });
 
     // Run all tests

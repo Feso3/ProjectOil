@@ -160,6 +160,26 @@
       transition: color 0.2s ease;
     }
 
+    .phase-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #e0f2fe 0%, #ddd6fe 100%);
+      color: #1e40af;
+      border: 2px solid #3b82f6;
+      margin-bottom: 8px;
+    }
+
+    .phase-indicator.open-game {
+      background: linear-gradient(135deg, #dcfce7 0%, #fef3c7 100%);
+      color: #15803d;
+      border-color: #22c55e;
+    }
+
     .counter-badge {
       display: inline-flex;
       align-items: center;
@@ -174,12 +194,6 @@
       transition: all 0.2s ease;
     }
 
-    .counter-badge.warning {
-      background: #fef3c7;
-      border-color: #fbbf24;
-      color: #92400e;
-    }
-
     .counter-badge.at-cap {
       background: #fee2e2;
       border-color: #ef4444;
@@ -187,15 +201,23 @@
       font-weight: 700;
     }
 
-    .auto-removal-alert {
+    .fifo-alert {
       width: 100%;
-      background: #fff3cd;
-      border: 2px solid #fbbf24;
+      max-width: 400px;
+      background: #fff7ed;
+      border: 2px solid #fb923c;
       border-radius: 12px;
-      padding: 12px 16px;
-      font-size: 0.9rem;
-      color: #856404;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #9a3412;
       animation: slideIn 0.3s ease-out;
+      margin: 8px 0;
+    }
+
+    .fifo-preview-piece {
+      box-shadow: inset 0 0 0 3px #fb923c !important;
+      animation: pulse 1.5s infinite;
+      opacity: 0.7;
     }
 
     @keyframes slideIn {
@@ -211,7 +233,7 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
+      50% { opacity: 0.6; }
     }
 
     .board-container {
@@ -518,17 +540,21 @@
 
     <div id="status">Player X's turn</div>
 
+    <div class="phase-indicator" id="phase-indicator">
+      Phase: <span id="phase-display">Opening (Step 1/6)</span>
+    </div>
+
     <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-      <div class="counter-badge" id="total-counter">
-        Total: <span id="total-count">0/15</span>
+      <div class="counter-badge" id="x-counter">
+        X: <span id="x-count">0/8</span>
       </div>
-      <div class="counter-badge" id="invasion-counter">
-        Invasion: <span id="invasion-count">0/8</span>
+      <div class="counter-badge" id="o-counter">
+        O: <span id="o-count">0/8</span>
       </div>
     </div>
 
-    <div id="auto-removal-alert" class="auto-removal-alert" style="display: none;">
-      <strong>⚠️ Auto-removed:</strong> <span id="removal-details"></span>
+    <div id="fifo-alert" class="fifo-alert" style="display: none;">
+      <strong>🔄 FIFO:</strong> <span id="fifo-details"></span>
     </div>
 
     <div class="board-container">
@@ -577,12 +603,14 @@
     const scoreDrawsElement = document.getElementById("score-draws");
     const gameStateElement = document.getElementById("game-state");
     const moveListElement = document.getElementById("move-list");
-    const totalCounterElement = document.getElementById("total-counter");
-    const totalCountElement = document.getElementById("total-count");
-    const invasionCounterElement = document.getElementById("invasion-counter");
-    const invasionCountElement = document.getElementById("invasion-count");
-    const autoRemovalAlertElement = document.getElementById("auto-removal-alert");
-    const removalDetailsElement = document.getElementById("removal-details");
+    const phaseIndicatorElement = document.getElementById("phase-indicator");
+    const phaseDisplayElement = document.getElementById("phase-display");
+    const xCounterElement = document.getElementById("x-counter");
+    const xCountElement = document.getElementById("x-count");
+    const oCounterElement = document.getElementById("o-counter");
+    const oCountElement = document.getElementById("o-count");
+    const fifoAlertElement = document.getElementById("fifo-alert");
+    const fifoDetailsElement = document.getElementById("fifo-details");
 
     // Game instance
     let game = new GameEngine();
@@ -609,6 +637,11 @@
 
       const winningIndices = new Set(game.winningLine || []);
 
+      // Get FIFO preview (piece that will be removed if at cap)
+      const fifoPreviewIndex = game.phase === game.PHASE_OPEN_GAME
+        ? game.getPieceToRemovePreview(game.currentPlayer)
+        : null;
+
       for (let i = 0; i < game.CELLS_COUNT; i++) {
         const cell = document.createElement("button");
         cell.type = "button";
@@ -621,8 +654,9 @@
         const filledClass = value ? "filled" : "";
         const darkClass = isDark ? "dark" : "";
         const isWinning = winningIndices.has(i);
+        const isFifoPreview = fifoPreviewIndex === i;
 
-        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""}`.trim();
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isFifoPreview ? "fifo-preview-piece" : ""}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", i);
         cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
@@ -642,46 +676,75 @@
         renderBoard();
         updateUI();
 
-        // Show auto-removal notification if any pieces were removed
-        if (result.autoRemovals && result.autoRemovals.length > 0) {
-          showAutoRemovalAlert(result.autoRemovals);
+        // Show FIFO removal notification if piece was removed
+        if (result.fifoRemoved !== null) {
+          showFifoAlert(result.fifoRemoved);
         } else {
-          hideAutoRemovalAlert();
+          hideFifoAlert();
         }
 
         if (result.gameOver) {
           handleGameOver(result);
         }
+      } else if (result.message) {
+        // Show error message briefly
+        statusElement.textContent = result.message;
+        setTimeout(() => {
+          updateStatus();
+        }, 2000);
       }
     }
 
     // Update all UI elements
     function updateUI() {
       updateStatus();
+      updatePhase();
+      updatePieceCounters();
       updateTurnIndicator();
       updateGameState();
       updateMoveHistory();
       updateUndoButton();
-      updateCounters();
     }
 
-    // Show auto-removal alert
-    function showAutoRemovalAlert(removals) {
-      const messages = removals.map(removal => {
-        const reason = removal.reason === 'invasion_penalty' ? 'Invasion Penalty' : 'Total Cap';
-        return `R${removal.coords.row + 1}, C${removal.coords.col + 1} (${reason})`;
-      }).join('; ');
+    // Show FIFO removal alert
+    function showFifoAlert(removedIndex) {
+      const coords = game.indexToCoords(removedIndex);
+      fifoDetailsElement.textContent = `Oldest piece removed at R${coords.row + 1}, C${coords.col + 1}`;
+      fifoAlertElement.style.display = 'block';
 
-      removalDetailsElement.textContent = messages;
-      autoRemovalAlertElement.style.display = 'block';
-
-      // Auto-hide after 5 seconds
-      setTimeout(hideAutoRemovalAlert, 5000);
+      // Auto-hide after 4 seconds
+      setTimeout(hideFifoAlert, 4000);
     }
 
-    // Hide auto-removal alert
-    function hideAutoRemovalAlert() {
-      autoRemovalAlertElement.style.display = 'none';
+    // Hide FIFO alert
+    function hideFifoAlert() {
+      fifoAlertElement.style.display = 'none';
+    }
+
+    // Update phase display
+    function updatePhase() {
+      if (game.phase === game.PHASE_OPENING) {
+        const step = game.plyCount + 1; // 1-indexed for display
+        phaseDisplayElement.textContent = `Opening (Step ${step}/6)`;
+        phaseIndicatorElement.classList.remove("open-game");
+      } else {
+        phaseDisplayElement.textContent = "Open Game";
+        phaseIndicatorElement.classList.add("open-game");
+      }
+    }
+
+    // Update piece counters
+    function updatePieceCounters() {
+      const xCount = game.countPlayerPieces(game.PLAYER_X);
+      const oCount = game.countPlayerPieces(game.PLAYER_O);
+      const maxCount = game.MAX_ON_BOARD_PER_PLAYER;
+
+      xCountElement.textContent = `${xCount}/${maxCount}`;
+      oCountElement.textContent = `${oCount}/${maxCount}`;
+
+      // Highlight when at cap
+      xCounterElement.classList.toggle("at-cap", xCount >= maxCount);
+      oCounterElement.classList.toggle("at-cap", oCount >= maxCount);
     }
 
     // Update status message
@@ -694,40 +757,16 @@
           statusElement.textContent = "It's a draw!";
           statusElement.classList.remove("message-win");
         }
+      } else if (game.pendingRemoval) {
+        statusElement.textContent = `Player ${game.currentPlayer}: Select a piece to remove from opponent's half`;
+        statusElement.classList.remove("message-win");
       } else {
         statusElement.textContent = `Player ${game.currentPlayer}'s turn`;
         statusElement.classList.remove("message-win");
       }
     }
 
-    // Update all counters (total and invasion)
-    function updateCounters() {
-      const totalCount = game.countTotalPieces(game.currentPlayer);
-      const invasionCount = game.countPiecesOnOpponentHalf(game.currentPlayer);
-      const totalCap = game.TOTAL_CAP;
-      const invasionCap = game.INVASION_CAP;
-
-      // Update total counter
-      totalCountElement.textContent = `${totalCount}/${totalCap}`;
-      totalCounterElement.classList.remove("warning", "at-cap");
-      if (totalCount >= totalCap - 1) {
-        totalCounterElement.classList.add("warning");
-      }
-      if (totalCount >= totalCap) {
-        totalCounterElement.classList.add("at-cap");
-      }
-
-      // Update invasion counter
-      invasionCountElement.textContent = `${invasionCount}/${invasionCap}`;
-      invasionCounterElement.classList.remove("warning", "at-cap");
-      if (invasionCount >= invasionCap - 1) {
-        invasionCounterElement.classList.add("warning");
-      }
-      if (invasionCount >= invasionCap) {
-        invasionCounterElement.classList.add("at-cap");
-      }
-    }
-
+    // Update invasion counter display
     // Update turn indicator
     function updateTurnIndicator() {
       const isXTurn = game.currentPlayer === game.PLAYER_X && !game.gameOver;
@@ -754,13 +793,13 @@
       game.moveHistory.forEach((move, idx) => {
         const item = document.createElement("li");
 
-        if (move.type === 'removal') {
-          const reasonText = move.reason === 'invasion_penalty' ? 'Inv' : 'Cap';
-          item.textContent = `${idx + 1}. ${move.player} [${reasonText}]`;
-          item.style.color = '#dc2626';
+        if (move.type === 'fifo_removal') {
+          item.textContent = `${idx + 1}. ${move.player} [FIFO]`;
+          item.style.color = '#fb923c';
           item.style.fontStyle = 'italic';
         } else {
-          item.textContent = `${idx + 1}. ${move.player}`;
+          const phaseLabel = move.phase === 'OPENING' ? '🔷' : '';
+          item.textContent = `${idx + 1}. ${move.player} ${phaseLabel}`;
         }
 
         const position = document.createElement("span");
@@ -851,15 +890,26 @@
       // Get the last move
       const lastMove = game.moveHistory[game.moveHistory.length - 1];
 
-      // Undo the last action (placement or removal)
-      if (lastMove.type === 'removal') {
-        // Restore removed piece
+      // Undo the last action (placement or FIFO removal)
+      if (lastMove.type === 'fifo_removal') {
+        // Restore the FIFO-removed piece
         game.board[lastMove.index] = lastMove.player;
-        game.pieceData[lastMove.index] = { player: lastMove.player, turnIndex: game.turnCounter++ };
+        game.pieceData[lastMove.index] = { player: lastMove.player, plyIndex: lastMove.ply };
       } else {
-        // Remove placed piece
+        // Remove the placed piece
         game.board[lastMove.index] = game.EMPTY;
         game.pieceData[lastMove.index] = null;
+
+        // Decrement ply count
+        game.plyCount--;
+
+        // Update phase if needed
+        if (game.phase === game.PHASE_OPEN_GAME && game.plyCount < game.OPENING_PLIES) {
+          game.phase = game.PHASE_OPENING;
+        }
+
+        // Switch back to previous player (only for placements, not removals)
+        game.currentPlayer = lastMove.player;
       }
 
       // Remove from history
@@ -873,13 +923,8 @@
         gameElement.classList.remove("over", "win");
       }
 
-      // Switch back to previous player if this was a placement
-      if (lastMove.type !== 'removal') {
-        game.currentPlayer = lastMove.player;
-      }
-
       // Re-render
-      hideAutoRemovalAlert();
+      hideFifoAlert();
       renderBoard();
       updateUI();
     }

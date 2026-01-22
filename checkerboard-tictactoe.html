@@ -220,6 +220,53 @@
       opacity: 0.7;
     }
 
+    /* Always-visible "next out" indicator (subtle) */
+    .next-out-piece {
+      box-shadow: inset 0 0 0 2px #fbbf24 !important;
+      position: relative;
+    }
+
+    .next-out-piece::after {
+      content: '⏳';
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      font-size: 0.7em;
+      opacity: 0.8;
+    }
+
+    /* Move removal preview (prominent, on hover) */
+    .move-removal-preview {
+      box-shadow: inset 0 0 0 4px #ef4444 !important;
+      animation: removePulse 0.8s infinite;
+      background: rgba(239, 68, 68, 0.15) !important;
+    }
+
+    /* Next-out info display */
+    .next-out-info {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.8rem;
+      padding: 8px 12px;
+      background: #fffbeb;
+      border-radius: 8px;
+      border: 1px solid #fbbf24;
+      color: #78350f;
+      margin: 8px 0;
+    }
+
+    .next-out-info .player-next-out {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .next-out-info .player-next-out strong {
+      color: #92400e;
+    }
+
     @keyframes slideIn {
       from {
         opacity: 0;
@@ -234,6 +281,17 @@
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.6; }
+    }
+
+    @keyframes removePulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.7;
+        transform: scale(0.98);
+      }
     }
 
     .board-container {
@@ -553,6 +611,15 @@
       </div>
     </div>
 
+    <div id="next-out-info" class="next-out-info" style="display: none;">
+      <div class="player-next-out">
+        <strong>X next out:</strong> <span id="x-next-out">None</span>
+      </div>
+      <div class="player-next-out">
+        <strong>O next out:</strong> <span id="o-next-out">None</span>
+      </div>
+    </div>
+
     <div id="fifo-alert" class="fifo-alert" style="display: none;">
       <strong>🔄 FIFO:</strong> <span id="fifo-details"></span>
     </div>
@@ -745,6 +812,9 @@
       updateStatus();
     }
 
+    // State for hover preview
+    let hoveredMoveIndex = null;
+
     // Render the 8x8 checkered board
     function renderBoard() {
       boardElement.innerHTML = "";
@@ -752,10 +822,16 @@
 
       const winningIndices = new Set(game.winningLine || []);
 
-      // Get FIFO preview (piece that will be removed if at cap)
-      const fifoPreviewIndex = game.phase === game.PHASE_OPEN_GAME
-        ? game.getPieceToRemovePreview(game.currentPlayer)
-        : null;
+      // Get next-out pieces for both players (always visible)
+      const xNextOut = game.getNextOutPiece(game.PLAYER_X);
+      const oNextOut = game.getNextOutPiece(game.PLAYER_O);
+
+      // Get move removal preview (hover-based)
+      let moveRemovalIndices = new Set();
+      if (hoveredMoveIndex !== null && !game.gameOver) {
+        const preview = game.getMoveRemovalPreview(hoveredMoveIndex);
+        preview.removedPieces.forEach(p => moveRemovalIndices.add(p.index));
+      }
 
       for (let i = 0; i < game.CELLS_COUNT; i++) {
         const cell = document.createElement("button");
@@ -769,17 +845,42 @@
         const filledClass = value ? "filled" : "";
         const darkClass = isDark ? "dark" : "";
         const isWinning = winningIndices.has(i);
-        const isFifoPreview = fifoPreviewIndex === i;
+        const isNextOut = i === xNextOut || i === oNextOut;
+        const isMoveRemovalPreview = moveRemovalIndices.has(i);
 
-        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isFifoPreview ? "fifo-preview-piece" : ""}`.trim();
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isNextOut ? "next-out-piece" : ""} ${isMoveRemovalPreview ? "move-removal-preview" : ""}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", i);
         cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
         cell.addEventListener("click", handleCellClick);
         cell.disabled = value !== game.EMPTY || game.gameOver;
 
+        // Add hover handlers for empty cells to show move preview
+        if (value === game.EMPTY && !game.gameOver) {
+          cell.addEventListener("mouseenter", handleCellHover);
+          cell.addEventListener("mouseleave", handleCellUnhover);
+        }
+
         boardElement.appendChild(cell);
       }
+    }
+
+    // Handle cell hover (preview what will be removed)
+    function handleCellHover(event) {
+      // Don't show preview during CPU turn
+      if (cpuEnabled && game.currentPlayer === CPU_PLAYER_SIDE) {
+        return;
+      }
+
+      const index = Number(event.currentTarget.getAttribute("data-index"));
+      hoveredMoveIndex = index;
+      renderBoard(); // Re-render to show preview
+    }
+
+    // Handle cell unhover (clear preview)
+    function handleCellUnhover(event) {
+      hoveredMoveIndex = null;
+      renderBoard(); // Re-render to clear preview
     }
 
     // Handle cell click
@@ -823,10 +924,42 @@
       updateStatus();
       updatePhase();
       updatePieceCounters();
+      updateNextOutInfo();
       updateTurnIndicator();
       updateGameState();
       updateMoveHistory();
       updateUndoButton();
+    }
+
+    // Update next-out info display
+    function updateNextOutInfo() {
+      const xNextOut = game.getNextOutPiece(game.PLAYER_X);
+      const oNextOut = game.getNextOutPiece(game.PLAYER_O);
+
+      const nextOutInfoElement = document.getElementById('next-out-info');
+      const xNextOutElement = document.getElementById('x-next-out');
+      const oNextOutElement = document.getElementById('o-next-out');
+
+      // Show info if either player has pieces on board
+      if (xNextOut !== null || oNextOut !== null) {
+        nextOutInfoElement.style.display = 'flex';
+
+        if (xNextOut !== null) {
+          const coords = game.indexToCoords(xNextOut);
+          xNextOutElement.textContent = `⏳ R${coords.row + 1}, C${coords.col + 1}`;
+        } else {
+          xNextOutElement.textContent = 'None';
+        }
+
+        if (oNextOut !== null) {
+          const coords = game.indexToCoords(oNextOut);
+          oNextOutElement.textContent = `⏳ R${coords.row + 1}, C${coords.col + 1}`;
+        } else {
+          oNextOutElement.textContent = 'None';
+        }
+      } else {
+        nextOutInfoElement.style.display = 'none';
+      }
     }
 
     // Show FIFO removal alert

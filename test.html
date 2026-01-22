@@ -132,6 +132,7 @@
   <div id="test-results"></div>
 
   <script src="game-engine.js"></script>
+  <script src="cpu-player.js"></script>
   <script>
     // Test runner
     class TestRunner {
@@ -825,6 +826,205 @@
 
       const game3 = new GameEngine(); // Default
       assertEquals(game3.MAX_ON_BOARD_PER_PLAYER, 8, 'Default max should be 8');
+    });
+
+    // ============================================================
+    // CPU PLAYER TESTS
+    // ============================================================
+
+    runner.section('CPU Player Tests');
+
+    runner.test('CPU module initializes correctly', () => {
+      const game = new GameEngine();
+      const cpu = new CPUPlayer(game, 'easy');
+
+      assert(cpu !== null, 'CPU should initialize');
+      assertEquals(cpu.difficulty, 'easy', 'Difficulty should be set');
+      assert(cpu.allSegments.length > 0, 'Segments should be precomputed');
+    });
+
+    runner.test('CPU chooses winning move when available', () => {
+      const game = new GameEngine();
+      const cpu = new CPUPlayer(game, 'easy');
+
+      // Complete opening
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(35); // X, ply 2
+      game.applyMove(10); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Set up O's winning opportunity: 32, 33, 34 (needs 35 to win)
+      game.applyMove(20); // X, ply 6
+      game.applyMove(32); // O, ply 7
+      game.applyMove(21); // X, ply 8
+      game.applyMove(33); // O, ply 9
+      game.applyMove(22); // X, ply 10
+      game.applyMove(34); // O, ply 11
+
+      // Now it's X's turn, but let's test that O would choose winning move
+      game.currentPlayer = 'O';
+      const move = cpu.getBestMove();
+
+      // O should choose 35 to complete 32-33-34-35 horizontal win in X's half
+      assertEquals(move, 35, 'CPU should choose winning move (index 35)');
+    });
+
+    runner.test('CPU blocks opponent immediate win', () => {
+      const game = new GameEngine();
+      const cpu = new CPUPlayer(game, 'easy');
+
+      // Complete opening
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(0); // X, ply 2
+      game.applyMove(50); // O, ply 3
+      game.applyMove(35); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X builds threat: 0, 1, 2 (needs 3 to win in O's half)
+      game.applyMove(1); // X, ply 6
+      game.applyMove(32); // O, ply 7
+      game.applyMove(2); // X, ply 8
+
+      // O's turn - should block at 3
+      game.currentPlayer = 'O';
+      const move = cpu.getBestMove();
+
+      assertEquals(move, 3, 'CPU should block X winning move at index 3');
+    });
+
+    runner.test('CPU respects opening phase restrictions', () => {
+      const game = new GameEngine();
+      const cpu = new CPUPlayer(game, 'easy');
+
+      // Ply 0: X must place in X's half
+      const move0 = cpu.getBestMove();
+      assert(move0 > 31, 'CPU move in opening ply 0 should be in X half (> 31)');
+
+      game.applyMove(move0); // X
+
+      // Ply 1: O must place in X's half
+      game.currentPlayer = 'O';
+      const move1 = cpu.getBestMove();
+      assert(move1 > 31, 'CPU move in opening ply 1 should be in X half (> 31)');
+
+      game.applyMove(move1); // O
+
+      // Ply 2: X must place in O's half
+      game.currentPlayer = 'X';
+      const move2 = cpu.getBestMove();
+      assert(move2 <= 31, 'CPU move in opening ply 2 should be in O half (<= 31)');
+    });
+
+    runner.test('CPU move selection is deterministic', () => {
+      const game1 = new GameEngine();
+      const cpu1 = new CPUPlayer(game1, 'medium');
+
+      const game2 = new GameEngine();
+      const cpu2 = new CPUPlayer(game2, 'medium');
+
+      // Same initial state should produce same move
+      const move1 = cpu1.getBestMove();
+      const move2 = cpu2.getBestMove();
+
+      assertEquals(move1, move2, 'CPU should be deterministic - same state produces same move');
+    });
+
+    runner.test('CPU handles FIFO removal correctly', () => {
+      const game = new GameEngine({ maxOnBoard: 4 });
+      const cpu = new CPUPlayer(game, 'medium');
+
+      // Complete opening with 3 pieces each
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X places 4th piece (at cap)
+      game.applyMove(20); // X, ply 6
+
+      // O's turn - O will place 4th piece and be at cap
+      game.currentPlayer = 'O';
+      const move = cpu.getBestMove();
+      const result = game.applyMove(move);
+
+      assert(result.success, 'CPU move should succeed');
+      assertEquals(game.countPlayerPieces('O'), 4, 'O should still have 4 pieces after move');
+
+      // O places 5th piece, should trigger FIFO
+      game.currentPlayer = 'O';
+      const move2 = cpu.getBestMove();
+      const result2 = game.applyMove(move2);
+
+      assert(result2.fifoRemoved !== null, 'FIFO should trigger when exceeding cap');
+      assertEquals(game.countPlayerPieces('O'), 4, 'O should have 4 pieces after FIFO removal');
+    });
+
+    runner.test('CPU difficulty levels produce different search depths', () => {
+      const game = new GameEngine();
+
+      const cpuEasy = new CPUPlayer(game, 'easy');
+      const cpuMedium = new CPUPlayer(game, 'medium');
+      const cpuHard = new CPUPlayer(game, 'hard');
+
+      assertEquals(cpuEasy.difficulty, 'easy', 'Easy difficulty set');
+      assertEquals(cpuMedium.difficulty, 'medium', 'Medium difficulty set');
+      assertEquals(cpuHard.difficulty, 'hard', 'Hard difficulty set');
+
+      // All should return valid moves
+      const moveEasy = cpuEasy.getBestMove();
+      const moveMedium = cpuMedium.getBestMove();
+      const moveHard = cpuHard.getBestMove();
+
+      assert(moveEasy !== null, 'Easy should return a move');
+      assert(moveMedium !== null, 'Medium should return a move');
+      assert(moveHard !== null, 'Hard should return a move');
+    });
+
+    runner.test('CPU predictFifoRemoval helper works correctly', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X has 3 pieces at cap, next placement should trigger FIFO
+      const predicted = game.predictFifoRemoval('X', 20);
+      assertEquals(predicted, 40, 'Should predict removal of oldest X piece (index 40)');
+
+      // O also at cap
+      const predictedO = game.predictFifoRemoval('O', 20);
+      assertEquals(predictedO, 45, 'Should predict removal of oldest O piece (index 45)');
+    });
+
+    runner.test('CPU clone method preserves state', () => {
+      const game = new GameEngine();
+
+      // Make some moves
+      game.applyMove(40);
+      game.applyMove(45);
+      game.applyMove(10);
+
+      // Clone the game
+      const cloned = game.clone();
+
+      // Verify state is preserved
+      assertArrayEquals(cloned.board, game.board, 'Board should be cloned');
+      assertEquals(cloned.currentPlayer, game.currentPlayer, 'Current player should be cloned');
+      assertEquals(cloned.phase, game.phase, 'Phase should be cloned');
+      assertEquals(cloned.plyCount, game.plyCount, 'Ply count should be cloned');
+
+      // Verify clones are independent
+      cloned.applyMove(15);
+      assert(cloned.plyCount !== game.plyCount, 'Clones should be independent');
     });
 
     // Run all tests

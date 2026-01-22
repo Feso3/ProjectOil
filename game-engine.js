@@ -196,6 +196,29 @@ class GameEngine {
   }
 
   /**
+   * Predict which piece would be removed if player places at index
+   * This is for CPU lookahead - does not modify state
+   * Returns index or null
+   */
+  predictFifoRemoval(player, moveIndex) {
+    // Only in open game phase does FIFO trigger
+    if (this.phase !== this.PHASE_OPEN_GAME) {
+      return null;
+    }
+
+    // Count pieces player would have after placing
+    const currentCount = this.countPlayerPieces(player);
+    const wouldExceed = (currentCount + 1) > this.MAX_ON_BOARD_PER_PLAYER;
+
+    if (!wouldExceed) {
+      return null;
+    }
+
+    // Return oldest piece
+    return this.findOldestPiece(player);
+  }
+
+  /**
    * Check if a position is valid for current phase
    */
   isValidMove(index) {
@@ -457,6 +480,26 @@ class GameEngine {
     this.phase = state.phase || this.PHASE_OPENING;
     this.plyCount = state.plyCount || 0;
     this.pieceData = [...state.pieceData];
+  }
+
+  /**
+   * Clone the engine instance (for CPU search trees)
+   * Returns a new GameEngine with the same state
+   */
+  clone() {
+    const cloned = new GameEngine({
+      maxOnBoard: this.MAX_ON_BOARD_PER_PLAYER,
+      openingPlies: this.OPENING_PLIES
+    });
+    cloned.loadState(this.getState());
+    return cloned;
+  }
+
+  /**
+   * Get opponent player
+   */
+  getOpponent(player) {
+    return player === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
   }
 }
 

@@ -580,6 +580,23 @@
       <ul id="move-list"></ul>
     </div>
 
+    <div class="cpu-controls" style="width: 100%; display: flex; flex-direction: column; gap: 12px; align-items: center;">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center;">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+          <input type="checkbox" id="cpu-enabled" style="width: 18px; height: 18px; cursor: pointer;">
+          <span>Play vs CPU</span>
+        </label>
+        <select id="cpu-difficulty" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; font-size: 0.85rem; cursor: pointer;" disabled>
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      <div id="cpu-thinking" style="display: none; padding: 8px 14px; background: #ddd6fe; color: #5b21b6; border-radius: 999px; font-size: 0.85rem; font-weight: 600; animation: pulse 1.5s infinite;">
+        🤖 CPU thinking...
+      </div>
+    </div>
+
     <div class="controls">
       <button class="button play-again" id="play-again">Play Again</button>
       <button class="button secondary" id="reset-score">Reset Score</button>
@@ -588,6 +605,7 @@
   </main>
 
   <script src="game-engine.js"></script>
+  <script src="cpu-player.js"></script>
   <script>
     // UI State
     const gameElement = document.getElementById("game");
@@ -612,8 +630,19 @@
     const fifoAlertElement = document.getElementById("fifo-alert");
     const fifoDetailsElement = document.getElementById("fifo-details");
 
+    // CPU controls
+    const cpuEnabledCheckbox = document.getElementById("cpu-enabled");
+    const cpuDifficultySelect = document.getElementById("cpu-difficulty");
+    const cpuThinkingElement = document.getElementById("cpu-thinking");
+
     // Game instance
     let game = new GameEngine();
+
+    // CPU state
+    let cpuEnabled = false;
+    let cpuPlayer = null;
+    let cpuDifficulty = 'medium';
+    const CPU_PLAYER_SIDE = 'O'; // CPU plays as O by default
 
     // Session score tracking
     const SCORE_KEY = "checkerboardTicTacToeScores";
@@ -628,6 +657,92 @@
       loadScores();
       renderBoard();
       updateUI();
+      setupCPUControls();
+    }
+
+    // Setup CPU controls
+    function setupCPUControls() {
+      cpuEnabledCheckbox.addEventListener('change', (e) => {
+        cpuEnabled = e.target.checked;
+        cpuDifficultySelect.disabled = !cpuEnabled;
+
+        if (cpuEnabled) {
+          initCPU();
+          // If it's CPU's turn at start of new game, make CPU move
+          if (game.currentPlayer === CPU_PLAYER_SIDE && !game.gameOver) {
+            setTimeout(executeCPUMove, 500);
+          }
+        } else {
+          cpuPlayer = null;
+        }
+      });
+
+      cpuDifficultySelect.addEventListener('change', (e) => {
+        cpuDifficulty = e.target.value;
+        if (cpuEnabled) {
+          initCPU();
+        }
+      });
+    }
+
+    // Initialize CPU player
+    function initCPU() {
+      cpuPlayer = new CPUPlayer(game, cpuDifficulty);
+    }
+
+    // Execute CPU move with delay for visual feedback
+    function executeCPUMove() {
+      if (!cpuEnabled || !cpuPlayer || game.gameOver) {
+        return;
+      }
+
+      if (game.currentPlayer !== CPU_PLAYER_SIDE) {
+        return;
+      }
+
+      // Show thinking indicator
+      showCPUThinking();
+      boardElement.classList.add('disabled');
+
+      // Delay for visual feedback
+      setTimeout(() => {
+        const move = cpuPlayer.getBestMove();
+
+        if (move !== null) {
+          const result = game.applyMove(move);
+
+          if (result.success) {
+            renderBoard();
+            updateUI();
+
+            // Show FIFO removal notification if piece was removed
+            if (result.fifoRemoved !== null) {
+              showFifoAlert(result.fifoRemoved);
+            } else {
+              hideFifoAlert();
+            }
+
+            if (result.gameOver) {
+              handleGameOver(result);
+            }
+          }
+        }
+
+        hideCPUThinking();
+        boardElement.classList.remove('disabled');
+      }, 600);
+    }
+
+    // Show CPU thinking indicator
+    function showCPUThinking() {
+      cpuThinkingElement.style.display = 'block';
+      statusElement.textContent = '🤖 CPU is thinking...';
+    }
+
+    // Hide CPU thinking indicator
+    function hideCPUThinking() {
+      cpuThinkingElement.style.display = 'none';
+      updateStatus();
     }
 
     // Render the 8x8 checkered board
@@ -669,6 +784,11 @@
 
     // Handle cell click
     function handleCellClick(event) {
+      // Don't allow human moves during CPU turn or when CPU is thinking
+      if (cpuEnabled && game.currentPlayer === CPU_PLAYER_SIDE) {
+        return;
+      }
+
       const index = Number(event.currentTarget.getAttribute("data-index"));
       const result = game.applyMove(index);
 
@@ -685,6 +805,9 @@
 
         if (result.gameOver) {
           handleGameOver(result);
+        } else if (cpuEnabled && game.currentPlayer === CPU_PLAYER_SIDE) {
+          // Trigger CPU move after human move
+          setTimeout(executeCPUMove, 500);
         }
       } else if (result.message) {
         // Show error message briefly
@@ -867,8 +990,18 @@
     function resetGame() {
       game.reset();
       gameElement.classList.remove("over", "win");
+      hideFifoAlert();
+      hideCPUThinking();
       renderBoard();
       updateUI();
+
+      // Reinitialize CPU and make CPU move if needed
+      if (cpuEnabled) {
+        initCPU();
+        if (game.currentPlayer === CPU_PLAYER_SIDE && !game.gameOver) {
+          setTimeout(executeCPUMove, 500);
+        }
+      }
     }
 
     // Reset scores

@@ -220,19 +220,35 @@
       opacity: 0.7;
     }
 
-    /* Always-visible "next out" indicator (subtle) */
-    .next-out-piece {
-      box-shadow: inset 0 0 0 2px #fbbf24 !important;
+    /* FIFO warning highlights - always visible */
+    /* RED = Next to be removed (oldest, 1 turn away) */
+    .fifo-warning-1 {
+      box-shadow: inset 0 0 0 3px #ef4444 !important;
       position: relative;
     }
 
-    .next-out-piece::after {
-      content: '⏳';
+    .fifo-warning-1::before {
+      content: '';
       position: absolute;
-      top: 2px;
-      right: 2px;
-      font-size: 0.7em;
-      opacity: 0.8;
+      inset: 0;
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+      pointer-events: none;
+    }
+
+    /* ORANGE = Second to be removed (second-oldest, 2 turns away) */
+    .fifo-warning-2 {
+      box-shadow: inset 0 0 0 3px #f97316 !important;
+      position: relative;
+    }
+
+    .fifo-warning-2::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
+      pointer-events: none;
     }
 
     /* Move removal preview (prominent, on hover) */
@@ -242,29 +258,57 @@
       background: rgba(239, 68, 68, 0.15) !important;
     }
 
-    /* Next-out info display */
-    .next-out-info {
+    /* FIFO warning legend */
+    .fifo-legend {
       display: flex;
-      gap: 16px;
+      gap: 12px;
       justify-content: center;
       align-items: center;
       font-size: 0.8rem;
-      padding: 8px 12px;
-      background: #fffbeb;
+      padding: 8px 14px;
+      background: linear-gradient(135deg, #fef2f2 0%, #fff7ed 100%);
       border-radius: 8px;
-      border: 1px solid #fbbf24;
+      border: 2px solid #f97316;
       color: #78350f;
       margin: 8px 0;
+      flex-wrap: wrap;
     }
 
-    .next-out-info .player-next-out {
+    .fifo-legend .legend-title {
+      font-weight: 600;
+      color: #92400e;
+    }
+
+    .fifo-legend .legend-items {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .fifo-legend .legend-item {
       display: flex;
       align-items: center;
       gap: 6px;
+      font-size: 0.75rem;
     }
 
-    .next-out-info .player-next-out strong {
-      color: #92400e;
+    .fifo-legend .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      border: 2px solid currentColor;
+    }
+
+    .fifo-legend .legend-color.red {
+      background: #ef4444;
+      border-color: #dc2626;
+      box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+    }
+
+    .fifo-legend .legend-color.orange {
+      background: #f97316;
+      border-color: #ea580c;
+      box-shadow: 0 0 4px rgba(249, 115, 22, 0.6);
     }
 
     @keyframes slideIn {
@@ -611,12 +655,17 @@
       </div>
     </div>
 
-    <div id="next-out-info" class="next-out-info" style="display: none;">
-      <div class="player-next-out">
-        <strong>X next out:</strong> <span id="x-next-out">None</span>
-      </div>
-      <div class="player-next-out">
-        <strong>O next out:</strong> <span id="o-next-out">None</span>
+    <div id="fifo-legend" class="fifo-legend" style="display: none;">
+      <div class="legend-title"><strong>⚠️ FIFO Warning:</strong></div>
+      <div class="legend-items">
+        <div class="legend-item">
+          <span class="legend-color red"></span>
+          <span>Red = Next removed (1st)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color orange"></span>
+          <span>Orange = Removed after next (2nd)</span>
+        </div>
       </div>
     </div>
 
@@ -819,9 +868,9 @@
 
       const winningIndices = new Set(game.winningLine || []);
 
-      // Get next-out pieces for both players (always visible)
-      const xNextOut = game.getNextOutPiece(game.PLAYER_X);
-      const oNextOut = game.getNextOutPiece(game.PLAYER_O);
+      // Get FIFO order for both players (top 2 oldest pieces)
+      const xFifo = game.getFifoOrder(game.PLAYER_X, 2);
+      const oFifo = game.getFifoOrder(game.PLAYER_O, 2);
 
       for (let i = 0; i < game.CELLS_COUNT; i++) {
         const cell = document.createElement("button");
@@ -835,9 +884,16 @@
         const filledClass = value ? "filled" : "";
         const darkClass = isDark ? "dark" : "";
         const isWinning = winningIndices.has(i);
-        const isNextOut = i === xNextOut || i === oNextOut;
 
-        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isNextOut ? "next-out-piece" : ""}`.trim();
+        // FIFO warning highlights (red = oldest, orange = second-oldest)
+        let fifoWarning = "";
+        if (xFifo[0] === i || oFifo[0] === i) {
+          fifoWarning = "fifo-warning-1"; // Red - next to be removed
+        } else if (xFifo[1] === i || oFifo[1] === i) {
+          fifoWarning = "fifo-warning-2"; // Orange - second to be removed
+        }
+
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${fifoWarning}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", i);
         cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
@@ -925,41 +981,24 @@
       updateStatus();
       updatePhase();
       updatePieceCounters();
-      updateNextOutInfo();
+      updateFifoLegend();
       updateTurnIndicator();
       updateGameState();
       updateMoveHistory();
       updateUndoButton();
     }
 
-    // Update next-out info display
-    function updateNextOutInfo() {
-      const xNextOut = game.getNextOutPiece(game.PLAYER_X);
-      const oNextOut = game.getNextOutPiece(game.PLAYER_O);
+    // Update FIFO warning legend display
+    function updateFifoLegend() {
+      const xFifo = game.getFifoOrder(game.PLAYER_X, 2);
+      const oFifo = game.getFifoOrder(game.PLAYER_O, 2);
+      const fifoLegendElement = document.getElementById('fifo-legend');
 
-      const nextOutInfoElement = document.getElementById('next-out-info');
-      const xNextOutElement = document.getElementById('x-next-out');
-      const oNextOutElement = document.getElementById('o-next-out');
-
-      // Show info if either player has pieces on board
-      if (xNextOut !== null || oNextOut !== null) {
-        nextOutInfoElement.style.display = 'flex';
-
-        if (xNextOut !== null) {
-          const coords = game.indexToCoords(xNextOut);
-          xNextOutElement.textContent = `⏳ R${coords.row + 1}, C${coords.col + 1}`;
-        } else {
-          xNextOutElement.textContent = 'None';
-        }
-
-        if (oNextOut !== null) {
-          const coords = game.indexToCoords(oNextOut);
-          oNextOutElement.textContent = `⏳ R${coords.row + 1}, C${coords.col + 1}`;
-        } else {
-          oNextOutElement.textContent = 'None';
-        }
+      // Show legend if any player has at least 1 piece on board
+      if (xFifo.length > 0 || oFifo.length > 0) {
+        fifoLegendElement.style.display = 'flex';
       } else {
-        nextOutInfoElement.style.display = 'none';
+        fifoLegendElement.style.display = 'none';
       }
     }
 

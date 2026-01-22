@@ -230,6 +230,41 @@ class GameEngine {
   }
 
   /**
+   * Get FIFO order for a player's pieces
+   * Returns array of piece indices sorted from oldest to newest (oldest first)
+   * @param {string} player - 'X' or 'O'
+   * @param {number} count - Number of pieces to return (optional, default: all)
+   * @returns {Array<number>} Array of indices in FIFO order (oldest first)
+   *
+   * Used for FIFO warning highlights in UI (red = oldest, orange = second-oldest)
+   */
+  getFifoOrder(player, count = null) {
+    const pieces = [];
+
+    // Collect all pieces for this player with their plyIndex
+    for (let i = 0; i < this.CELLS_COUNT; i++) {
+      if (this.board[i] === player && this.pieceData[i]) {
+        pieces.push({
+          index: i,
+          plyIndex: this.pieceData[i].plyIndex
+        });
+      }
+    }
+
+    // Sort by plyIndex (oldest first)
+    pieces.sort((a, b) => a.plyIndex - b.plyIndex);
+
+    // Extract just the indices
+    const indices = pieces.map(p => p.index);
+
+    // Return requested count or all
+    if (count !== null) {
+      return indices.slice(0, count);
+    }
+    return indices;
+  }
+
+  /**
    * Get preview of all pieces that would be removed if a move is made
    * Simulates the move's removal effects without mutating state
    * Returns { removedPieces: [{ player, index, reason }] }

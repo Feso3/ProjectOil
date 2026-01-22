@@ -66,6 +66,13 @@ class GameEngine {
     // pieceData[index] = { player, plyIndex } or null
     this.pieceData = Array(this.CELLS_COUNT).fill(null);
 
+    // FIFO warning highlights gating
+    // Per-player flag: only enable warnings after player reaches cap once
+    this.fifoWarningsEnabled = {
+      X: false,
+      O: false
+    };
+
     // For UI preview of FIFO removal
     this.fifoRemovalPreview = null;
   }
@@ -265,6 +272,18 @@ class GameEngine {
   }
 
   /**
+   * Check if FIFO warning highlights should be shown for a player
+   * Returns true if player has reached cap at least once this game
+   * @param {string} player - 'X' or 'O'
+   * @returns {boolean} Whether warnings are enabled for this player
+   *
+   * Used by UI to gate display of red/orange FIFO warning highlights
+   */
+  isFifoWarningsEnabled(player) {
+    return this.fifoWarningsEnabled[player] === true;
+  }
+
+  /**
    * Get preview of all pieces that would be removed if a move is made
    * Simulates the move's removal effects without mutating state
    * Returns { removedPieces: [{ player, index, reason }] }
@@ -413,6 +432,13 @@ class GameEngine {
           });
         }
       }
+    }
+
+    // Update FIFO warning highlights flag (after placement + any removals resolved)
+    // Enable warnings for current player if they've reached cap
+    const currentPieceCount = this.countPlayerPieces(this.currentPlayer);
+    if (currentPieceCount >= this.MAX_ON_BOARD_PER_PLAYER) {
+      this.fifoWarningsEnabled[this.currentPlayer] = true;
     }
 
     // 3. Check for win

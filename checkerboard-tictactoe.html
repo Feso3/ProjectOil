@@ -869,11 +869,11 @@
       const winningIndices = new Set(game.winningLine || []);
 
       // Get FIFO order for both players (top 2 oldest pieces)
-      // Only show warnings when player is AT the cap (8 pieces)
-      const xCount = game.countPlayerPieces(game.PLAYER_X);
-      const oCount = game.countPlayerPieces(game.PLAYER_O);
-      const xFifo = xCount >= game.MAX_ON_BOARD_PER_PLAYER ? game.getFifoOrder(game.PLAYER_X, 2) : [];
-      const oFifo = oCount >= game.MAX_ON_BOARD_PER_PLAYER ? game.getFifoOrder(game.PLAYER_O, 2) : [];
+      // Only show warnings if player has reached cap at least once (fifoWarningsEnabled flag)
+      const xWarningsEnabled = game.isFifoWarningsEnabled(game.PLAYER_X);
+      const oWarningsEnabled = game.isFifoWarningsEnabled(game.PLAYER_O);
+      const xFifo = xWarningsEnabled ? game.getFifoOrder(game.PLAYER_X, 2) : [];
+      const oFifo = oWarningsEnabled ? game.getFifoOrder(game.PLAYER_O, 2) : [];
 
       for (let i = 0; i < game.CELLS_COUNT; i++) {
         const cell = document.createElement("button");
@@ -889,7 +889,7 @@
         const isWinning = winningIndices.has(i);
 
         // FIFO warning highlights (red = oldest, orange = second-oldest)
-        // Only shown when player is at cap (8 pieces) - at risk of removal
+        // Only shown if player has reached cap at least once (warnings enabled)
         let fifoWarning = "";
         if (xFifo[0] === i || oFifo[0] === i) {
           fifoWarning = "fifo-warning-1"; // Red - 1 move away from removal
@@ -994,12 +994,12 @@
 
     // Update FIFO warning legend display
     function updateFifoLegend() {
-      const xCount = game.countPlayerPieces(game.PLAYER_X);
-      const oCount = game.countPlayerPieces(game.PLAYER_O);
+      const xWarningsEnabled = game.isFifoWarningsEnabled(game.PLAYER_X);
+      const oWarningsEnabled = game.isFifoWarningsEnabled(game.PLAYER_O);
       const fifoLegendElement = document.getElementById('fifo-legend');
 
-      // Show legend only if at least one player is at cap (at risk of FIFO removal)
-      if (xCount >= game.MAX_ON_BOARD_PER_PLAYER || oCount >= game.MAX_ON_BOARD_PER_PLAYER) {
+      // Show legend only if at least one player has reached cap (warnings enabled)
+      if (xWarningsEnabled || oWarningsEnabled) {
         fifoLegendElement.style.display = 'flex';
       } else {
         fifoLegendElement.style.display = 'none';

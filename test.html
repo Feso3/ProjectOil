@@ -1027,6 +1027,151 @@
       assert(cloned.plyCount !== game.plyCount, 'Clones should be independent');
     });
 
+    // ============================================================
+    // FIFO VISIBILITY TESTS
+    // ============================================================
+
+    runner.section('FIFO Visibility Tests');
+
+    runner.test('getNextOutPiece returns oldest piece for each player', () => {
+      const game = new GameEngine();
+
+      // Initially no pieces
+      assertEquals(game.getNextOutPiece('X'), null, 'X should have no next-out initially');
+      assertEquals(game.getNextOutPiece('O'), null, 'O should have no next-out initially');
+
+      // Place some pieces
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+
+      // X's oldest is at index 40 (ply 0)
+      assertEquals(game.getNextOutPiece('X'), 40, 'X next-out should be index 40 (oldest)');
+
+      // O's oldest is at index 45 (ply 1)
+      assertEquals(game.getNextOutPiece('O'), 45, 'O next-out should be index 45 (oldest)');
+    });
+
+    runner.test('getNextOutPiece updates after FIFO removal', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X's next-out is index 40 (ply 0)
+      assertEquals(game.getNextOutPiece('X'), 40, 'X next-out should be 40 before FIFO');
+
+      // X places 4th piece, triggers FIFO removal of index 40
+      game.applyMove(20); // X, ply 6
+
+      // Now X's oldest is index 10 (ply 2)
+      assertEquals(game.getNextOutPiece('X'), 10, 'X next-out should be 10 after FIFO removed 40');
+    });
+
+    runner.test('getMoveRemovalPreview returns pieces for FIFO move', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // Complete opening (3 pieces each)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X is at cap (3/3), placing at index 20 should trigger FIFO
+      const preview = game.getMoveRemovalPreview(20);
+
+      assertEquals(preview.removedPieces.length, 1, 'Should preview 1 removal');
+      assertEquals(preview.removedPieces[0].player, 'X', 'Removed piece should be X');
+      assertEquals(preview.removedPieces[0].index, 40, 'Should remove oldest X piece (index 40)');
+      assertEquals(preview.removedPieces[0].reason, 'fifo', 'Removal reason should be FIFO');
+    });
+
+    runner.test('getMoveRemovalPreview returns empty for non-FIFO move', () => {
+      const game = new GameEngine({ maxOnBoard: 8 });
+
+      // Place a few pieces (not at cap)
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // X has 3 pieces (not at cap of 8), placing at index 20 should NOT trigger FIFO
+      const preview = game.getMoveRemovalPreview(20);
+
+      assertEquals(preview.removedPieces.length, 0, 'Should preview no removals when not at cap');
+    });
+
+    runner.test('getMoveRemovalPreview during opening phase returns empty', () => {
+      const game = new GameEngine({ maxOnBoard: 3 });
+
+      // During opening phase, FIFO doesn't trigger
+      const preview1 = game.getMoveRemovalPreview(40);
+      assertEquals(preview1.removedPieces.length, 0, 'No FIFO during opening phase (ply 0)');
+
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+
+      const preview2 = game.getMoveRemovalPreview(10);
+      assertEquals(preview2.removedPieces.length, 0, 'No FIFO during opening phase (ply 2)');
+    });
+
+    runner.test('getMoveRemovalPreview returns empty for invalid moves', () => {
+      const game = new GameEngine();
+
+      // Complete opening
+      game.applyMove(40); // X, ply 0
+      game.applyMove(45); // O, ply 1
+      game.applyMove(10); // X, ply 2
+      game.applyMove(15); // O, ply 3
+      game.applyMove(50); // X, ply 4
+      game.applyMove(55); // O, ply 5
+
+      // Try to preview an occupied cell
+      const preview1 = game.getMoveRemovalPreview(40);
+      assertEquals(preview1.removedPieces.length, 0, 'Invalid move (occupied) should return no preview');
+
+      // Try to preview out of bounds
+      const preview2 = game.getMoveRemovalPreview(-1);
+      assertEquals(preview2.removedPieces.length, 0, 'Invalid move (out of bounds) should return no preview');
+
+      const preview3 = game.getMoveRemovalPreview(100);
+      assertEquals(preview3.removedPieces.length, 0, 'Invalid move (out of bounds) should return no preview');
+    });
+
+    runner.test('FIFO visibility helpers are deterministic', () => {
+      const game1 = new GameEngine({ maxOnBoard: 3 });
+      const game2 = new GameEngine({ maxOnBoard: 3 });
+
+      // Make same moves in both games
+      for (const index of [40, 45, 10, 15, 50, 55]) {
+        game1.applyMove(index);
+        game2.applyMove(index);
+      }
+
+      // getNextOutPiece should return same result
+      assertEquals(game1.getNextOutPiece('X'), game2.getNextOutPiece('X'), 'getNextOutPiece should be deterministic for X');
+      assertEquals(game1.getNextOutPiece('O'), game2.getNextOutPiece('O'), 'getNextOutPiece should be deterministic for O');
+
+      // getMoveRemovalPreview should return same result
+      const preview1 = game1.getMoveRemovalPreview(20);
+      const preview2 = game2.getMoveRemovalPreview(20);
+
+      assertEquals(preview1.removedPieces.length, preview2.removedPieces.length, 'Preview length should match');
+      if (preview1.removedPieces.length > 0) {
+        assertEquals(preview1.removedPieces[0].index, preview2.removedPieces[0].index, 'Preview index should match');
+      }
+    });
+
     // Run all tests
     runner.run();
   </script>

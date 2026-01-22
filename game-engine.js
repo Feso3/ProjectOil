@@ -219,6 +219,53 @@ class GameEngine {
   }
 
   /**
+   * Get the "next out" piece for a player
+   * This is the oldest remaining piece that would be removed next time FIFO triggers
+   * Returns index or null (null if player has no pieces on board)
+   *
+   * Used for always-visible "next out" indicators in UI
+   */
+  getNextOutPiece(player) {
+    return this.findOldestPiece(player);
+  }
+
+  /**
+   * Get preview of all pieces that would be removed if a move is made
+   * Simulates the move's removal effects without mutating state
+   * Returns { removedPieces: [{ player, index, reason }] }
+   *
+   * Used for hover-based move preview in UI
+   */
+  getMoveRemovalPreview(moveIndex) {
+    const removedPieces = [];
+
+    // Validate move
+    if (!this.isValidMove(moveIndex)) {
+      return { removedPieces };
+    }
+
+    // Only FIFO removal happens in Open Game phase
+    if (this.phase === this.PHASE_OPEN_GAME) {
+      const currentPlayer = this.currentPlayer;
+      const currentCount = this.countPlayerPieces(currentPlayer);
+
+      // Check if placing would exceed cap
+      if ((currentCount + 1) > this.MAX_ON_BOARD_PER_PLAYER) {
+        const oldestIndex = this.findOldestPiece(currentPlayer);
+        if (oldestIndex !== null) {
+          removedPieces.push({
+            player: currentPlayer,
+            index: oldestIndex,
+            reason: 'fifo'
+          });
+        }
+      }
+    }
+
+    return { removedPieces };
+  }
+
+  /**
    * Check if a position is valid for current phase
    */
   isValidMove(index) {

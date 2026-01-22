@@ -160,6 +160,43 @@
       transition: color 0.2s ease;
     }
 
+    .invasion-counter {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #f0f4f8;
+      color: var(--muted);
+      border: 1px solid #e5e7eb;
+    }
+
+    .invasion-counter.warning {
+      background: #fef3c7;
+      border-color: #fbbf24;
+      color: #92400e;
+    }
+
+    .invasion-counter.exceeded {
+      background: #fee2e2;
+      border-color: #ef4444;
+      color: #991b1b;
+      animation: pulse 1s infinite;
+    }
+
+    .removable-piece {
+      box-shadow: inset 0 0 0 3px #ef4444 !important;
+      cursor: pointer;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
     .board-container {
       width: 100%;
       display: flex;
@@ -464,6 +501,10 @@
 
     <div id="status">Player X's turn</div>
 
+    <div class="invasion-counter" id="invasion-counter">
+      Invasion: <span id="invasion-count">0/8</span>
+    </div>
+
     <div class="board-container">
       <div class="side-labels">
         <div class="side-label o-zone">
@@ -510,6 +551,8 @@
     const scoreDrawsElement = document.getElementById("score-draws");
     const gameStateElement = document.getElementById("game-state");
     const moveListElement = document.getElementById("move-list");
+    const invasionCounterElement = document.getElementById("invasion-counter");
+    const invasionCountElement = document.getElementById("invasion-count");
 
     // Game instance
     let game = new GameEngine();
@@ -536,6 +579,11 @@
 
       const winningIndices = new Set(game.winningLine || []);
 
+      // Get removable pieces if we're in removal mode
+      const removablePieces = game.pendingRemoval
+        ? new Set(game.getPiecesOnOpponentHalf(game.currentPlayer).filter(idx => idx !== game.lastPlacedIndex))
+        : new Set();
+
       for (let i = 0; i < game.CELLS_COUNT; i++) {
         const cell = document.createElement("button");
         cell.type = "button";
@@ -548,13 +596,20 @@
         const filledClass = value ? "filled" : "";
         const darkClass = isDark ? "dark" : "";
         const isWinning = winningIndices.has(i);
+        const isRemovable = removablePieces.has(i);
 
-        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""}`.trim();
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isRemovable ? "removable-piece" : ""}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", i);
         cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
         cell.addEventListener("click", handleCellClick);
-        cell.disabled = value !== game.EMPTY || game.gameOver;
+
+        // In removal mode, only removable pieces are enabled
+        if (game.pendingRemoval) {
+          cell.disabled = !isRemovable;
+        } else {
+          cell.disabled = value !== game.EMPTY || game.gameOver;
+        }
 
         boardElement.appendChild(cell);
       }
@@ -563,14 +618,43 @@
     // Handle cell click
     function handleCellClick(event) {
       const index = Number(event.currentTarget.getAttribute("data-index"));
-      const result = game.applyMove(index);
 
-      if (result.success) {
-        renderBoard();
-        updateUI();
+      // If we're in removal mode, handle piece removal
+      if (game.pendingRemoval) {
+        const result = game.removePiece(index);
 
-        if (result.gameOver) {
-          handleGameOver(result);
+        if (result.success) {
+          renderBoard();
+          updateUI();
+
+          if (result.gameOver) {
+            handleGameOver(result);
+          }
+        } else if (result.message) {
+          // Show error message briefly
+          const originalStatus = statusElement.textContent;
+          statusElement.textContent = result.message;
+          setTimeout(() => {
+            updateStatus();
+          }, 1500);
+        }
+      } else {
+        // Normal move placement
+        const result = game.applyMove(index);
+
+        if (result.success) {
+          renderBoard();
+          updateUI();
+
+          // Check if invasion cap was exceeded and we need removal
+          if (result.invasionCapExceeded) {
+            // UI already updated, user needs to select a piece to remove
+            return;
+          }
+
+          if (result.gameOver) {
+            handleGameOver(result);
+          }
         }
       }
     }
@@ -582,6 +666,7 @@
       updateGameState();
       updateMoveHistory();
       updateUndoButton();
+      updateInvasionCounter();
     }
 
     // Update status message
@@ -594,9 +679,30 @@
           statusElement.textContent = "It's a draw!";
           statusElement.classList.remove("message-win");
         }
+      } else if (game.pendingRemoval) {
+        statusElement.textContent = `Player ${game.currentPlayer}: Select a piece to remove from opponent's half`;
+        statusElement.classList.remove("message-win");
       } else {
         statusElement.textContent = `Player ${game.currentPlayer}'s turn`;
         statusElement.classList.remove("message-win");
+      }
+    }
+
+    // Update invasion counter display
+    function updateInvasionCounter() {
+      const count = game.countPiecesOnOpponentHalf(game.currentPlayer);
+      const cap = game.INVASION_CAP;
+
+      invasionCountElement.textContent = `${count}/${cap}`;
+
+      // Remove all state classes
+      invasionCounterElement.classList.remove("warning", "exceeded");
+
+      // Add appropriate class based on count
+      if (count > cap) {
+        invasionCounterElement.classList.add("exceeded");
+      } else if (count === cap) {
+        invasionCounterElement.classList.add("warning");
       }
     }
 
@@ -625,7 +731,12 @@
 
       game.moveHistory.forEach((move, idx) => {
         const item = document.createElement("li");
-        item.textContent = `${idx + 1}. ${move.player}`;
+
+        if (move.type === 'removal') {
+          item.textContent = `${idx + 1}. ${move.player} (removed)`;
+        } else {
+          item.textContent = `${idx + 1}. ${move.player}`;
+        }
 
         const position = document.createElement("span");
         position.textContent = `R${move.row + 1}, C${move.col + 1}`;
@@ -715,20 +826,34 @@
       // Get the last move
       const lastMove = game.moveHistory[game.moveHistory.length - 1];
 
-      // Remove it from the board
-      game.board[lastMove.index] = game.EMPTY;
+      // If we're in pending removal state, cancel it and undo the piece placement
+      if (game.pendingRemoval) {
+        // Remove the last placed piece
+        game.board[game.lastPlacedIndex] = game.EMPTY;
+        game.pendingRemoval = false;
+        game.lastPlacedIndex = null;
 
-      // Remove from history
-      game.moveHistory.pop();
+        // Remove the move from history
+        game.moveHistory.pop();
 
-      // Reset game over state
-      game.gameOver = false;
-      game.winner = null;
-      game.winningLine = null;
-      gameElement.classList.remove("over", "win");
+        // Switch back to previous player
+        game.currentPlayer = lastMove.player;
+      } else {
+        // Normal undo: remove piece from board
+        game.board[lastMove.index] = game.EMPTY;
 
-      // Switch back to previous player
-      game.currentPlayer = lastMove.player;
+        // Remove from history
+        game.moveHistory.pop();
+
+        // Reset game over state
+        game.gameOver = false;
+        game.winner = null;
+        game.winningLine = null;
+        gameElement.classList.remove("over", "win");
+
+        // Switch back to previous player
+        game.currentPlayer = lastMove.player;
+      }
 
       // Re-render
       renderBoard();

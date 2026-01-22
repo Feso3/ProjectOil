@@ -100,9 +100,9 @@ When you place a piece during Open Game, the following happens **in this exact o
   - Phase indicator shows "Opening (Step X/6)" or "Open Game"
   - Per-player counters show piece count (e.g., "X: 7/8")
   - **FIFO Visibility** (see below for details):
-    - Always-visible "next out" markers (⏳) on both players' oldest pieces
+    - Color-coded warning highlights (RED = next removed, ORANGE = removed after next)
     - Hover preview shows which piece will be removed when placing a move
-    - Next-out info panel displays coordinates for both players
+    - Visual legend explains color meanings
   - Move history marks opening moves with 🔷 and FIFO removals with [FIFO]
 - **Win**: First player to get 4-in-a-row entirely in opponent's territory wins
 
@@ -110,19 +110,29 @@ When you place a piece during Open Game, the following happens **in this exact o
 
 To help players plan their moves, the game provides transparent FIFO removal indicators:
 
-#### Always-Visible "Next Out" Markers
-- **What**: Each player's oldest piece (the one that would be removed first) is marked with a golden ring and ⏳ badge
-- **When**: Visible whenever pieces are on the board
-- **Purpose**: Shows which piece is at risk of FIFO removal for each player
-- **Display**: Info panel shows "X next out: R5, C5" and "O next out: R2, C3"
+#### Color-Coded Warning Highlights (Always Visible)
+- **RED Highlight**: The oldest piece for each player (next to be removed, "1 turn away")
+  - 3px red border with glowing shadow
+  - Indicates which piece will be FIFO-removed when that player next exceeds the cap
+- **ORANGE Highlight**: The second-oldest piece for each player (removed after next, "2 turns away")
+  - 3px orange border with glowing shadow
+  - Shows which piece becomes vulnerable after the RED piece is removed
+- **When**: Always visible whenever players have pieces on board
+- **Per-Player**: Each player's FIFO queue is tracked independently
+
+#### Visual Legend
+- Displayed below piece counters when pieces are on board
+- **"⚠️ FIFO Warning:"**
+  - Red = Next removed (1st)
+  - Orange = Removed after next (2nd)
 
 #### Hover-Based Move Preview
-- **What**: When hovering over an empty square, pieces that would be removed are highlighted in red
+- **What**: When hovering over an empty square, pieces that would be removed are highlighted
 - **When**: Active during your turn (not during CPU turn)
 - **Purpose**: Preview the exact FIFO consequences before confirming a move
-- **Visual**: Strong red border with pulsing animation on piece(s) to be removed
+- **Visual**: Additional pulsing animation on piece(s) to be removed
 
-These features make FIFO removal transparent and help players strategize around piece lifetimes.
+These features make FIFO removal transparent and help players strategize around piece lifetimes. The color coding provides at-a-glance awareness of which pieces are approaching removal.
 
 ### Example Scenarios
 
@@ -236,7 +246,8 @@ The project follows a clean separation of concerns:
   - `findOldestPiece(player)`: Find oldest piece by plyIndex for FIFO removal
   - `getPieceToRemovePreview(player)`: Get piece that would be removed if player places now (for UI preview)
   - `predictFifoRemoval(player, move)`: Predict FIFO removal without modifying state (for CPU lookahead)
-  - **`getNextOutPiece(player)`**: Get the oldest piece for a player (always-visible "next out" indicator)
+  - **`getNextOutPiece(player)`**: Get the oldest piece for a player
+  - **`getFifoOrder(player, count)`**: Get array of piece indices in FIFO order (oldest first) for warning highlights
   - **`getMoveRemovalPreview(moveIndex)`**: Simulate move and return pieces that would be removed (hover preview)
   - `countPlayerPieces(player)`: Count total pieces for player on board
   - `checkWin(player)`: Validate 4-in-a-row entirely in opponent's half

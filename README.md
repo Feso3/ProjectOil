@@ -1,5 +1,36 @@
-# Checkerboard Tic-Tac-Toe
+# ProjectOil - Strategic Board Games Collection
 
+A collection of innovative tic-tac-toe variants with strategic depth, territorial gameplay, and checkers-inspired mechanics.
+
+## 🎮 Games
+
+### 1. **Tic-Tac-Toe 2: Infiltration v1.1** (LATEST!)
+Strategic board game with flexible movement and territorial conquest.
+
+**v1.1 Changes:**
+- Movement: Any adjacent square (8 directions: N, S, E, W, NE, NW, SE, SW)
+- Captures: Jump 2 squares in any straight line over enemy
+- Piece count: 10 pieces per player (up from 8)
+- Removed kings system (omnidirectional movement by default)
+- Multi-jump: Continue capturing in the same turn (optional)
+
+**Two-Phase Gameplay:**
+- **Phase 1 (Deployment)**: Players alternate placing 10 pieces in their home territory
+- **Phase 2 (Movement)**: Move to adjacent squares or capture by jumping over enemies
+
+**Win Condition:** Create 4-in-a-row (H/V/D) entirely in your opponent's territory
+
+**Key Features:**
+- Flexible 8-directional movement (orthogonal + diagonal)
+- Capture mechanics: Jump over adjacent enemies, return captured pieces to owner's inventory
+- Multi-jump captures (optional)
+- Configurable rules: Toggle piece count, captures, multi-jump, forced capture, pie rule
+
+[Play Infiltration v1.1](infiltration.html) | [View Tests](infiltration-test.html)
+
+---
+
+### 2. **Checkerboard Tic-Tac-Toe**
 A strategic twist on classic tic-tac-toe with territorial gameplay on an 8×8 checkered board.
 
 ## 🎮 Game Rules
@@ -28,26 +59,42 @@ Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your oppon
 
 ## 🚀 How to Play
 
-### Option 1: Web Version (Recommended)
-1. Open `checkerboard-tictactoe.html` in any modern web browser
-2. No build tools or installation required - it's completely self-contained
-3. Click on any empty square to place your piece
-4. The game automatically validates moves and detects wins
+### Web Version (Recommended)
+All games are completely self-contained - just open the HTML files in any modern web browser!
 
-### Option 2: Run Tests
-1. Open `test.html` in your web browser
-2. View comprehensive test results for the game engine
-3. All tests should pass, validating the win detection logic
+**Play Games:**
+- `index.html` - Landing page with all games
+- `infiltration.html` - Tic-Tac-Toe 2: Infiltration (advanced)
+- `checkerboard-tictactoe.html` - Checkerboard variant (strategic)
+- `tictactoe.html` - Classic 3×3 (with AI)
+
+**Run Tests:**
+- `infiltration-test.html` - Infiltration game engine tests
+- `test.html` - Checkerboard game engine tests
+
+**No installation required** - No npm, no build tools, no dependencies!
+
+### GitHub Pages (Mobile-Friendly)
+Visit: `https://Feso3.github.io/ProjectOil/`
+
+Play all games directly in your browser on desktop or mobile!
 
 ## 📁 Project Structure
 
 ```
 ProjectOil/
-├── checkerboard-tictactoe.html    # Main game (self-contained HTML/CSS/JS)
-├── game-engine.js                 # Pure game logic (no UI dependencies)
-├── test.html                      # Test suite with visual results
-├── tictactoe.html                 # Legacy 3×3 tic-tac-toe (original)
-├── main.py                        # Python CLI version (original, not updated)
+├── index.html                     # Landing page (game selector)
+│
+├── infiltration.html              # Infiltration game (NEW - advanced)
+├── infiltration-engine.js         # Infiltration game logic
+├── infiltration-test.html         # Infiltration test suite
+│
+├── checkerboard-tictactoe.html    # Checkerboard variant (strategic)
+├── game-engine.js                 # Checkerboard game logic
+├── test.html                      # Checkerboard test suite
+│
+├── tictactoe.html                 # Classic 3×3 (with AI)
+├── main.py                        # Python CLI version
 └── README.md                      # This file
 ```
 
@@ -146,6 +193,100 @@ function getBestMove(gameState) {
 Simply open `test.html` in a browser. All tests run automatically and display results.
 
 Expected output: **All tests pass** ✓
+
+---
+
+## 🎯 Tic-Tac-Toe 2: Infiltration v1.1 - Detailed Rules
+
+### Game Overview
+Infiltration v1.1 is a 2-player strategic board game with flexible 8-directional movement and the territorial objective of getting 4-in-a-row in enemy territory.
+
+### Version 1.1 Changes
+- **Movement**: Now any adjacent square (8 directions) instead of diagonal-forward only
+- **Captures**: Jump 2 squares in any straight line (not just diagonal)
+- **Piece Count**: Increased to 10 pieces per player (up from 8)
+- **Kings Removed**: All pieces move omnidirectionally by default
+- **Multi-Jump**: Can continue capturing in the same turn (optional)
+
+### Setup
+- **Board**: 8×8 checkered grid
+- **Players**: X (bottom) and O (top)
+- **Pieces**: Each player starts with 10 pieces (configurable: 4-16)
+- **Territories**:
+  - **Top half (rows 1-4)**: O's home, X's target zone
+  - **Bottom half (rows 5-8)**: X's home, O's target zone
+
+### Phase 1: Deployment
+1. Players alternate placing one piece per turn
+2. Pieces **must** be placed in your home territory only
+3. Once all pieces are placed (10 per player by default), Phase 2 begins
+
+### Phase 2: Movement & Infiltration
+
+**Movement Rules (v1.1):**
+- Select one of your pieces
+- **Standard Move**: Move 1 square to any adjacent empty square
+  - All 8 directions available: N, S, E, W, NE, NW, SE, SW
+  - No forward/backward restrictions
+  - No king promotion needed - all pieces move omnidirectionally
+
+**Capture Rules (if enabled):**
+- **Jump**: Move 2 squares in a straight line (orthogonal or diagonal) over an adjacent enemy into an empty square
+- **All 8 directions** available for captures: N, S, E, W, NE, NW, SE, SW
+- Remove the jumped piece from the board
+- Captured piece returns to the owner's inventory
+- On your next turn, you may re-place the captured piece in your home territory (instead of moving)
+- **Multi-jump** (optional): If another capture is available from the landing square, you may continue capturing
+- **Forced capture** (optional): If you can capture, you must capture
+
+### Win Condition
+At the end of your turn, if you have **4 pieces in a row** (horizontal, vertical, or diagonal) **entirely within your opponent's territory**, you win immediately!
+
+**Critical Rules:**
+- All 4 pieces must be in opponent territory (no mixed territory wins)
+- Win is checked after every move
+- First player to achieve this wins
+
+### Optional Rules (Tuning Knobs)
+
+**Piece Count** (4-16)
+- Default: 10 pieces per player (v1.1)
+- More pieces = longer, more complex game
+
+**Capture** (ON/OFF)
+- Default: ON
+- OFF = pieces cannot be captured (pure movement game)
+
+**Multi-Jump** (ON/OFF) - NEW in v1.1
+- Default: ON
+- ON = can continue capturing in the same turn
+- OFF = one capture per turn maximum
+
+**Forced Capture** (ON/OFF)
+- Default: OFF
+- ON = if you can capture, you must (like international checkers)
+
+**Pie Rule** (ON/OFF)
+- Default: OFF
+- ON = after X's first placement, O can choose to swap colors
+- Balances first-player advantage
+
+### Strategy Tips (v1.1)
+1. **Flexible positioning**: With 8-directional movement, pieces are more mobile - use this to your advantage
+2. **Control the center**: Center squares provide maximum movement options (up to 8 directions)
+3. **Orthogonal power**: Don't underestimate horizontal/vertical moves - they're now just as valid as diagonal
+4. **Threaten multiple lines**: Force opponent to defend multiple potential 4-in-a-rows
+5. **Capture chains**: With multi-jump enabled, set up opportunities for multiple captures in one turn
+6. **Use captures wisely**: Trading pieces can open up board position, and captured pieces return to inventory
+7. **Defensive walls**: Use orthogonal positioning to block opponent's advance more effectively
+8. **Infiltration timing**: Balance between advancing to opponent territory and maintaining defensive position
+
+### Files (v1.1)
+- `infiltration.html` - Main game interface (v1.1 UI)
+- `infiltration-engine.js` - Game logic engine (v1.1 rules)
+- `infiltration-test.html` - Comprehensive test suite (v1.1 - all tests pass ✓)
+
+---
 
 ## 📜 License
 

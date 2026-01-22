@@ -129,6 +129,36 @@ When you place a piece during Open Game, the following happens **in this exact o
 - When hovering over the board, index 45 shows orange border (FIFO preview)
 - This tells X: "If you place now, this piece will be removed"
 
+### CPU Player (Computer Opponent)
+
+Checkerboard Tic-Tac-Toe includes a **deterministic AI opponent** with three difficulty levels:
+
+#### Features
+- **Play vs CPU**: Toggle to enable computer opponent (plays as O by default)
+- **Three difficulty levels**:
+  - **Easy**: Heuristic evaluation only (no lookahead) - Good for beginners
+  - **Medium**: Minimax search depth 2 with alpha-beta pruning - Balanced challenge
+  - **Hard**: Minimax search depth 3 with alpha-beta pruning and candidate move pruning - Expert level
+- **Deterministic behavior**: CPU makes the same move given the same board state (no randomness)
+- **Smart play**: CPU recognizes winning moves, blocks opponent threats, and respects all game rules
+
+#### How CPU Works
+The CPU uses a combination of techniques to choose moves:
+
+1. **Immediate Win/Block Detection**: Always takes winning moves and blocks opponent's immediate wins
+2. **Heuristic Evaluation**: Scores positions based on:
+   - Threat patterns (4-cell segments with 3, 2, or 1 piece)
+   - Positional advantage (prefer squares in opponent's half)
+   - FIFO awareness (considers which pieces might be removed)
+3. **Minimax Search**: Looks ahead 2-3 moves to find optimal play
+4. **Alpha-Beta Pruning**: Efficiently searches the game tree
+5. **Candidate Move Pruning** (Hard only): Focuses search on the most promising moves
+
+#### CPU Respects All Rules
+- **Opening restrictions**: CPU follows the staged opening pattern correctly
+- **FIFO removal**: CPU accounts for automatic piece removal when at cap
+- **Win validation**: CPU only counts 4-in-a-row entirely in opponent's half
+
 ## 🚀 How to Play
 
 ### Web Version (Recommended)
@@ -163,6 +193,7 @@ ProjectOil/
 │
 ├── checkerboard-tictactoe.html    # Checkerboard variant (strategic)
 ├── game-engine.js                 # Checkerboard game logic
+├── cpu-player.js                  # CPU opponent (Easy/Medium/Hard)
 ├── test.html                      # Checkerboard test suite
 │
 ├── tictactoe.html                 # Classic 3×3 (with AI)
@@ -183,24 +214,51 @@ The project follows a clean separation of concerns:
   - `isValidMove(index)`: Check if move is valid for current phase (opening restrictions or open game)
   - `findOldestPiece(player)`: Find oldest piece by plyIndex for FIFO removal
   - `getPieceToRemovePreview(player)`: Get piece that would be removed if player places now (for UI preview)
+  - `predictFifoRemoval(player, move)`: Predict FIFO removal without modifying state (for CPU lookahead)
   - `countPlayerPieces(player)`: Count total pieces for player on board
   - `checkWin(player)`: Validate 4-in-a-row entirely in opponent's half
   - `isInOpponentHalf(index, player)`: Check if position is in opponent territory
   - `isInXHalf(index)` / `isInOHalf(index)`: Check territory by half
   - `getValidMoves()`: Get all valid empty positions for current phase
+  - `clone()`: Create independent copy of engine for search trees
+  - `getOpponent(player)`: Get opponent player
   - `reset()`: Start a new game (opening phase)
   - `getState()`/`loadState()`: Save/restore game state including phase and pieceData
+
+### CPU Player (`cpu-player.js`)
+- **Deterministic AI** with three difficulty levels
+- **Architecture**:
+  - Precomputes all 4-length winning segments on board initialization
+  - Precomputes square influence (participation in winning segments)
+  - Easy: Heuristic evaluation only (no search)
+  - Medium: Minimax depth 2 with alpha-beta pruning
+  - Hard: Minimax depth 3 with alpha-beta pruning + candidate move pruning
+- **Key methods**:
+  - `getBestMove()`: Returns best move for current game state
+  - `evaluateState(engine, perspective)`: Heuristic evaluation function
+  - `evaluateSegments(engine, perspective)`: Threat scoring based on piece patterns
+  - `minimax(engine, depth, isMaximizing, perspective, alpha, beta)`: Minimax search with pruning
+  - `findImmediateWin(player, moves)`: Detect winning moves
+  - `getCandidateMoves(engine, legalMoves, player)`: Prune move list for Hard mode
+- **Heuristic factors**:
+  - Terminal states (win/loss detection)
+  - Threat patterns (3-in-a-row, 2-in-a-row in opponent's half)
+  - Positional bias (favor high-influence squares)
+  - FIFO awareness (consider piece removal impact)
 
 ### UI Layer (`checkerboard-tictactoe.html`)
 - Renders the 8×8 checkered board
 - Handles user input and interactions
+- CPU controls (enable/disable, difficulty selector)
 - Displays game state, turn indicators, and move history
+- Shows "CPU thinking..." indicator during CPU moves
 - Manages scoreboard with sessionStorage persistence
 
 ### Test Suite (`test.html`)
 - Comprehensive tests for all win scenarios
 - Edge case validation (boundaries, corners)
 - False positive prevention (3-in-a-row, disconnected pieces)
+- CPU player tests (determinism, rule compliance, move quality)
 - Visual board state for debugging
 
 ## 🧪 Test Coverage
@@ -230,15 +288,27 @@ The test suite validates:
 ✅ **Placement order tracking** with pieceData array storing {player, plyIndex}
 ✅ **Independent piece counting** per player with separate caps
 
+**CPU Player Tests:**
+✅ **CPU initialization** with precomputed segments and difficulty levels
+✅ **Winning move detection** CPU chooses immediate winning move when available
+✅ **Blocking opponent wins** CPU blocks opponent's immediate winning move
+✅ **Opening phase compliance** CPU respects opening restrictions by ply
+✅ **Deterministic behavior** Same game state produces same CPU move
+✅ **FIFO handling** CPU correctly handles FIFO removal when placing at cap
+✅ **Difficulty levels** Easy/Medium/Hard produce valid moves with different search depths
+✅ **predictFifoRemoval** helper correctly predicts which piece will be removed
+✅ **clone() method** preserves state and creates independent copies for search
+
 ## 🔮 Future Enhancements
 
 The architecture is designed for extensibility:
 
 - **Checkers-like movement**: Add diagonal movement and capture rules
-- **AI opponent**: Minimax algorithm (game engine is ready)
+- **Web Worker for Hard mode**: Offload Hard difficulty CPU search to Web Worker for better UI responsiveness
 - **Configurable board sizes**: Support 6×6, 10×10, etc.
 - **Variable win lengths**: 3-in-a-row, 5-in-a-row modes
 - **Online multiplayer**: Real-time play with WebSockets
+- **Opening book**: Add pre-computed optimal openings for CPU
 - **Undo/Redo system**: Full move history navigation (partial implementation included)
 
 ## 🎨 Features

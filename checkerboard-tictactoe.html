@@ -812,9 +812,6 @@
       updateStatus();
     }
 
-    // State for hover preview
-    let hoveredMoveIndex = null;
-
     // Render the 8x8 checkered board
     function renderBoard() {
       boardElement.innerHTML = "";
@@ -825,13 +822,6 @@
       // Get next-out pieces for both players (always visible)
       const xNextOut = game.getNextOutPiece(game.PLAYER_X);
       const oNextOut = game.getNextOutPiece(game.PLAYER_O);
-
-      // Get move removal preview (hover-based)
-      let moveRemovalIndices = new Set();
-      if (hoveredMoveIndex !== null && !game.gameOver) {
-        const preview = game.getMoveRemovalPreview(hoveredMoveIndex);
-        preview.removedPieces.forEach(p => moveRemovalIndices.add(p.index));
-      }
 
       for (let i = 0; i < game.CELLS_COUNT; i++) {
         const cell = document.createElement("button");
@@ -846,9 +836,8 @@
         const darkClass = isDark ? "dark" : "";
         const isWinning = winningIndices.has(i);
         const isNextOut = i === xNextOut || i === oNextOut;
-        const isMoveRemovalPreview = moveRemovalIndices.has(i);
 
-        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isNextOut ? "next-out-piece" : ""} ${isMoveRemovalPreview ? "move-removal-preview" : ""}`.trim();
+        cell.className = `cell ${baseClass} ${filledClass} ${darkClass} ${isWinning ? "winning" : ""} ${isNextOut ? "next-out-piece" : ""}`.trim();
         cell.textContent = value;
         cell.setAttribute("data-index", i);
         cell.setAttribute("aria-label", `Row ${coords.row + 1}, Column ${coords.col + 1}`);
@@ -873,14 +862,26 @@
       }
 
       const index = Number(event.currentTarget.getAttribute("data-index"));
-      hoveredMoveIndex = index;
-      renderBoard(); // Re-render to show preview
+
+      // Get preview of what would be removed
+      const preview = game.getMoveRemovalPreview(index);
+
+      // Highlight pieces that would be removed
+      preview.removedPieces.forEach(p => {
+        const cellToHighlight = boardElement.querySelector(`[data-index="${p.index}"]`);
+        if (cellToHighlight) {
+          cellToHighlight.classList.add('move-removal-preview');
+        }
+      });
     }
 
     // Handle cell unhover (clear preview)
     function handleCellUnhover(event) {
-      hoveredMoveIndex = null;
-      renderBoard(); // Re-render to clear preview
+      // Remove all preview highlights
+      const previewCells = boardElement.querySelectorAll('.move-removal-preview');
+      previewCells.forEach(cell => {
+        cell.classList.remove('move-removal-preview');
+      });
     }
 
     // Handle cell click

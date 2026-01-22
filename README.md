@@ -109,21 +109,23 @@ When you place a piece during Open Game, the following happens **in this exact o
 
 To help players plan their moves, the game provides transparent FIFO removal indicators:
 
-#### Color-Coded Warning Highlights (Always Visible)
-- **RED Highlight**: The oldest piece for each player (next to be removed, "1 turn away")
+#### Color-Coded Warning Highlights
+- **RED Highlight**: The oldest piece for each player (next to be removed, "1 move away")
   - 3px red border with glowing shadow
-  - Indicates which piece will be FIFO-removed when that player next exceeds the cap
-- **ORANGE Highlight**: The second-oldest piece for each player (removed after next, "2 turns away")
+  - Indicates which piece will be FIFO-removed when that player makes their next move
+- **ORANGE Highlight**: The second-oldest piece for each player ("2 moves away")
   - 3px orange border with glowing shadow
-  - Shows which piece becomes vulnerable after the RED piece is removed
-- **When**: Always visible whenever players have pieces on board
+  - Shows which piece will be removed after the player makes 2 more moves
+- **When**: Only visible when a player has reached the cap (8 pieces on board)
+  - Below the cap, no pieces are at risk, so no warnings show
+  - At the cap, warnings appear because the next move triggers FIFO removal
 - **Per-Player**: Each player's FIFO queue is tracked independently
 
 #### Visual Legend
-- Displayed below piece counters when pieces are on board
+- Displayed below piece counters when at least one player is at cap
 - **"⚠️ FIFO Warning:"**
-  - Red = Next removed (1st)
-  - Orange = Removed after next (2nd)
+  - Red = Next removed (1st) - will be removed on player's next move
+  - Orange = Removed after next (2nd) - will be removed after 2 more moves
 
 #### Hover-Based Move Preview
 - **What**: When hovering over an empty square, pieces that would be removed are highlighted

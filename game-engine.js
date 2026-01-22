@@ -6,6 +6,7 @@
  * - Two players: X and O
  * - Win condition: 4-in-a-row (horizontal, vertical, or diagonal)
  * - Critical constraint: The 4-in-a-row must be entirely in the opponent's side
+ * - Invasion Cap: Maximum N pieces per player on opponent's half at once (default: 8)
  *
  * Sides definition:
  * - X's home side: rows 5-8 (bottom half, indices 32-63)
@@ -15,13 +16,16 @@
  */
 
 class GameEngine {
-  constructor() {
+  constructor(config = {}) {
     this.BOARD_SIZE = 8;
     this.CELLS_COUNT = this.BOARD_SIZE * this.BOARD_SIZE; // 64
     this.WIN_LENGTH = 4;
     this.EMPTY = "";
     this.PLAYER_X = "X";
     this.PLAYER_O = "O";
+
+    // Invasion cap: max pieces on opponent half
+    this.INVASION_CAP = config.invasionCap || 8;
 
     // Row indices that define the boundary
     // Rows 0-3 (indices 0-31) = top half (O's home, X's opponent side)
@@ -41,6 +45,8 @@ class GameEngine {
     this.winner = null;
     this.winningLine = null;
     this.moveHistory = [];
+    this.pendingRemoval = false; // Awaiting removal due to invasion cap
+    this.lastPlacedIndex = null; // Track last placed piece for invasion cap logic
   }
 
   /**
@@ -61,13 +67,53 @@ class GameEngine {
   }
 
   /**
+   * Check if index is in the opponent's half for the given player
+   */
+  isInOpponentHalf(index, player) {
+    if (player === this.PLAYER_X) {
+      // X's opponent half is top half (indices 0-31)
+      return index <= this.TOP_HALF_MAX_INDEX;
+    } else {
+      // O's opponent half is bottom half (indices 32-63)
+      return index > this.TOP_HALF_MAX_INDEX;
+    }
+  }
+
+  /**
+   * Count how many of player's pieces are on opponent's half
+   */
+  countPiecesOnOpponentHalf(player) {
+    let count = 0;
+    for (let i = 0; i < this.CELLS_COUNT; i++) {
+      if (this.board[i] === player && this.isInOpponentHalf(i, player)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Get indices of player's pieces on opponent's half (for removal selection)
+   */
+  getPiecesOnOpponentHalf(player) {
+    const pieces = [];
+    for (let i = 0; i < this.CELLS_COUNT; i++) {
+      if (this.board[i] === player && this.isInOpponentHalf(i, player)) {
+        pieces.push(i);
+      }
+    }
+    return pieces;
+  }
+
+  /**
    * Check if a position is valid and empty
    */
   isValidMove(index) {
     return index >= 0 &&
            index < this.CELLS_COUNT &&
            this.board[index] === this.EMPTY &&
-           !this.gameOver;
+           !this.gameOver &&
+           !this.pendingRemoval; // Can't place if removal pending
   }
 
   /**
@@ -82,6 +128,12 @@ class GameEngine {
   /**
    * Apply a move to the board
    * Returns { success: boolean, message: string }
+   *
+   * Turn order with invasion cap:
+   * 1. Place piece
+   * 2. Check if invasion cap exceeded
+   * 3. If exceeded, require removal (pendingRemoval = true)
+   * 4. If not exceeded, check win and switch player
    */
   applyMove(index) {
     if (this.gameOver) {
@@ -94,6 +146,7 @@ class GameEngine {
 
     // Place the piece
     this.board[index] = this.currentPlayer;
+    this.lastPlacedIndex = index;
 
     // Record move history
     const coords = this.indexToCoords(index);
@@ -104,6 +157,72 @@ class GameEngine {
       col: coords.col
     });
 
+    // Check invasion cap BEFORE win check
+    const piecesOnOpponentHalf = this.countPiecesOnOpponentHalf(this.currentPlayer);
+    if (piecesOnOpponentHalf > this.INVASION_CAP) {
+      // Cap exceeded - require removal
+      this.pendingRemoval = true;
+      const removablePieces = this.getPiecesOnOpponentHalf(this.currentPlayer);
+      return {
+        success: true,
+        message: `Invasion cap exceeded (${piecesOnOpponentHalf}/${this.INVASION_CAP}). Select a piece to remove.`,
+        invasionCapExceeded: true,
+        removablePieces,
+        currentCount: piecesOnOpponentHalf,
+        cap: this.INVASION_CAP
+      };
+    }
+
+    // No cap issue - proceed with normal win check and turn switch
+    return this.completeTurn();
+  }
+
+  /**
+   * Remove a piece from the board (invasion cap enforcement)
+   * Returns { success: boolean, message: string }
+   */
+  removePiece(index) {
+    if (!this.pendingRemoval) {
+      return { success: false, message: "No removal required" };
+    }
+
+    // Validate: must be current player's piece on opponent half
+    if (this.board[index] !== this.currentPlayer) {
+      return { success: false, message: "Not your piece" };
+    }
+
+    if (!this.isInOpponentHalf(index, this.currentPlayer)) {
+      return { success: false, message: "Piece not on opponent half" };
+    }
+
+    // Don't allow removing the just-placed piece
+    if (index === this.lastPlacedIndex) {
+      return { success: false, message: "Cannot remove the piece you just placed" };
+    }
+
+    // Remove the piece
+    this.board[index] = this.EMPTY;
+    this.pendingRemoval = false;
+
+    // Record removal in history
+    const coords = this.indexToCoords(index);
+    this.moveHistory.push({
+      type: 'removal',
+      player: this.currentPlayer,
+      index,
+      row: coords.row,
+      col: coords.col
+    });
+
+    // Now complete the turn (check win, switch player)
+    return this.completeTurn();
+  }
+
+  /**
+   * Complete the turn after placement (and optional removal)
+   * Check for win, draw, and switch player
+   */
+  completeTurn() {
     // Check for win
     const winResult = this.checkWin(this.currentPlayer);
     if (winResult.isWin) {
@@ -222,7 +341,10 @@ class GameEngine {
       gameOver: this.gameOver,
       winner: this.winner,
       winningLine: this.winningLine ? [...this.winningLine] : null,
-      moveHistory: [...this.moveHistory]
+      moveHistory: [...this.moveHistory],
+      pendingRemoval: this.pendingRemoval,
+      lastPlacedIndex: this.lastPlacedIndex,
+      invasionCap: this.INVASION_CAP
     };
   }
 
@@ -236,6 +358,8 @@ class GameEngine {
     this.winner = state.winner;
     this.winningLine = state.winningLine ? [...state.winningLine] : null;
     this.moveHistory = [...state.moveHistory];
+    this.pendingRemoval = state.pendingRemoval || false;
+    this.lastPlacedIndex = state.lastPlacedIndex || null;
   }
 }
 

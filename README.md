@@ -4,22 +4,29 @@ A collection of innovative tic-tac-toe variants with strategic depth, territoria
 
 ## 🎮 Games
 
-### 1. **Tic-Tac-Toe 2: Infiltration** (NEW!)
-The ultimate strategic evolution combining checkers movement with territorial objectives.
+### 1. **Tic-Tac-Toe 2: Infiltration v1.1** (LATEST!)
+Strategic board game with flexible movement and territorial conquest.
+
+**v1.1 Changes:**
+- Movement: Any adjacent square (8 directions: N, S, E, W, NE, NW, SE, SW)
+- Captures: Jump 2 squares in any straight line over enemy
+- Piece count: 10 pieces per player (up from 8)
+- Removed kings system (omnidirectional movement by default)
+- Multi-jump: Continue capturing in the same turn (optional)
 
 **Two-Phase Gameplay:**
-- **Phase 1 (Placement)**: Players alternate placing 8 pieces in their home territory
-- **Phase 2 (Movement)**: Move pieces diagonally, capture enemies, promote to kings, and infiltrate
+- **Phase 1 (Deployment)**: Players alternate placing 10 pieces in their home territory
+- **Phase 2 (Movement)**: Move to adjacent squares or capture by jumping over enemies
 
 **Win Condition:** Create 4-in-a-row (H/V/D) entirely in your opponent's territory
 
 **Key Features:**
-- Checkers-style diagonal movement (forward for regular pieces, both directions for kings)
+- Flexible 8-directional movement (orthogonal + diagonal)
 - Capture mechanics: Jump over adjacent enemies, return captured pieces to owner's inventory
-- King promotion: Reach the far edge to move in all diagonal directions
-- Configurable rules: Toggle pieces count, captures, kings, forced capture, pie rule
+- Multi-jump captures (optional)
+- Configurable rules: Toggle piece count, captures, multi-jump, forced capture, pie rule
 
-[Play Infiltration](infiltration.html) | [View Tests](infiltration-test.html)
+[Play Infiltration v1.1](infiltration.html) | [View Tests](infiltration-test.html)
 
 ---
 
@@ -189,44 +196,48 @@ Expected output: **All tests pass** ✓
 
 ---
 
-## 🎯 Tic-Tac-Toe 2: Infiltration - Detailed Rules
+## 🎯 Tic-Tac-Toe 2: Infiltration v1.1 - Detailed Rules
 
 ### Game Overview
-Infiltration is a 2-player strategic board game that combines checkers-style movement with the territorial objective of getting 4-in-a-row in enemy territory.
+Infiltration v1.1 is a 2-player strategic board game with flexible 8-directional movement and the territorial objective of getting 4-in-a-row in enemy territory.
+
+### Version 1.1 Changes
+- **Movement**: Now any adjacent square (8 directions) instead of diagonal-forward only
+- **Captures**: Jump 2 squares in any straight line (not just diagonal)
+- **Piece Count**: Increased to 10 pieces per player (up from 8)
+- **Kings Removed**: All pieces move omnidirectionally by default
+- **Multi-Jump**: Can continue capturing in the same turn (optional)
 
 ### Setup
 - **Board**: 8×8 checkered grid
 - **Players**: X (bottom) and O (top)
-- **Pieces**: Each player starts with 8 pieces (configurable: 4-16)
+- **Pieces**: Each player starts with 10 pieces (configurable: 4-16)
 - **Territories**:
   - **Top half (rows 1-4)**: O's home, X's target zone
   - **Bottom half (rows 5-8)**: X's home, O's target zone
 
-### Phase 1: Placement
+### Phase 1: Deployment
 1. Players alternate placing one piece per turn
 2. Pieces **must** be placed in your home territory only
-3. Once all pieces are placed (8 per player by default), Phase 2 begins
+3. Once all pieces are placed (10 per player by default), Phase 2 begins
 
 ### Phase 2: Movement & Infiltration
 
-**Movement Rules:**
+**Movement Rules (v1.1):**
 - Select one of your pieces
-- Move **diagonally forward** one space into an empty square
-- Forward direction: X moves up (toward row 0), O moves down (toward row 7)
-- Regular pieces can only move forward; Kings can move any diagonal direction
+- **Standard Move**: Move 1 square to any adjacent empty square
+  - All 8 directions available: N, S, E, W, NE, NW, SE, SW
+  - No forward/backward restrictions
+  - No king promotion needed - all pieces move omnidirectionally
 
-**Capture Rules** (if enabled):
-- Jump diagonally over an adjacent enemy piece into an empty square beyond
+**Capture Rules (if enabled):**
+- **Jump**: Move 2 squares in a straight line (orthogonal or diagonal) over an adjacent enemy into an empty square
+- **All 8 directions** available for captures: N, S, E, W, NE, NW, SE, SW
 - Remove the jumped piece from the board
 - Captured piece returns to the owner's inventory
 - On your next turn, you may re-place the captured piece in your home territory (instead of moving)
-- Forced capture (optional): If you can capture, you must capture
-
-**King Promotion** (if enabled):
-- X pieces reaching row 0 (top edge) become kings 👑
-- O pieces reaching row 7 (bottom edge) become kings 👑
-- Kings can move diagonally in ALL directions (forward and backward)
-- Kings maintain promotion after being captured and re-placed
+- **Multi-jump** (optional): If another capture is available from the landing square, you may continue capturing
+- **Forced capture** (optional): If you can capture, you must capture
 
 ### Win Condition
 At the end of your turn, if you have **4 pieces in a row** (horizontal, vertical, or diagonal) **entirely within your opponent's territory**, you win immediately!
@@ -239,16 +250,17 @@ At the end of your turn, if you have **4 pieces in a row** (horizontal, vertical
 ### Optional Rules (Tuning Knobs)
 
 **Piece Count** (4-16)
-- Default: 8 pieces per player
+- Default: 10 pieces per player (v1.1)
 - More pieces = longer, more complex game
 
 **Capture** (ON/OFF)
 - Default: ON
 - OFF = pieces cannot be captured (pure movement game)
 
-**Kings** (ON/OFF)
+**Multi-Jump** (ON/OFF) - NEW in v1.1
 - Default: ON
-- OFF = no promotion, pieces always move forward only
+- ON = can continue capturing in the same turn
+- OFF = one capture per turn maximum
 
 **Forced Capture** (ON/OFF)
 - Default: OFF
@@ -259,18 +271,20 @@ At the end of your turn, if you have **4 pieces in a row** (horizontal, vertical
 - ON = after X's first placement, O can choose to swap colors
 - Balances first-player advantage
 
-### Strategy Tips
-1. **Build forward gradually**: Don't rush all pieces to the front
-2. **Control the center**: Center squares provide more movement options
-3. **Threaten multiple lines**: Force opponent to defend multiple potential 4-in-a-rows
-4. **Use captures wisely**: Trading pieces can open up board position
-5. **King timing**: Promoting too early can leave kings exposed
-6. **Defensive positioning**: Block opponent's potential 4-in-a-row opportunities
+### Strategy Tips (v1.1)
+1. **Flexible positioning**: With 8-directional movement, pieces are more mobile - use this to your advantage
+2. **Control the center**: Center squares provide maximum movement options (up to 8 directions)
+3. **Orthogonal power**: Don't underestimate horizontal/vertical moves - they're now just as valid as diagonal
+4. **Threaten multiple lines**: Force opponent to defend multiple potential 4-in-a-rows
+5. **Capture chains**: With multi-jump enabled, set up opportunities for multiple captures in one turn
+6. **Use captures wisely**: Trading pieces can open up board position, and captured pieces return to inventory
+7. **Defensive walls**: Use orthogonal positioning to block opponent's advance more effectively
+8. **Infiltration timing**: Balance between advancing to opponent territory and maintaining defensive position
 
-### Files
-- `infiltration.html` - Main game interface
-- `infiltration-engine.js` - Game logic engine
-- `infiltration-test.html` - Comprehensive test suite (all tests pass ✓)
+### Files (v1.1)
+- `infiltration.html` - Main game interface (v1.1 UI)
+- `infiltration-engine.js` - Game logic engine (v1.1 rules)
+- `infiltration-test.html` - Comprehensive test suite (v1.1 - all tests pass ✓)
 
 ---
 

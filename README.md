@@ -117,13 +117,15 @@ To help players plan their moves, the game provides transparent FIFO removal ind
 - **ORANGE Highlight**: The second-oldest piece for each player ("2 moves away")
   - 3px orange border with glowing shadow
   - Shows which piece will be removed after the player makes 2 more moves
-- **When**: Only visible when a player has reached the cap (8 pieces on board)
-  - Below the cap, no pieces are at risk, so no warnings show
-  - At the cap, warnings appear because the next move triggers FIFO removal
-- **Per-Player**: Each player's FIFO queue is tracked independently
+- **When**: Only visible after a player has reached the cap (8 pieces) at least once
+  - Before reaching cap: No warnings (FIFO not yet relevant for that player)
+  - After reaching cap: Warnings remain enabled for the rest of the game
+  - Rationale: Highlights only appear once all of a player's pieces are "in circulation"
+- **Per-Player**: Each player's FIFO queue and warning state tracked independently
+  - X and O can have warnings enabled at different times
 
 #### Visual Legend
-- Displayed below piece counters when at least one player is at cap
+- Displayed below piece counters when at least one player has reached cap
 - **"⚠️ FIFO Warning:"**
   - Red = Next removed (1st) - will be removed on player's next move
   - Orange = Removed after next (2nd) - will be removed after 2 more moves

@@ -30,10 +30,10 @@ Strategic board game with flexible movement and territorial conquest.
 
 ---
 
-### 2. **Checkerboard Tic-Tac-Toe**
-A strategic twist on classic tic-tac-toe with territorial gameplay on an 8×8 checkered board.
+### 2. **Checkerboard Tic-Tac-Toe (vNext with FIFO Caps)**
+A strategic twist on classic tic-tac-toe with territorial gameplay, total piece limits, and invasion penalties on an 8×8 checkered board.
 
-## 🎮 Game Rules
+## 🎮 Game Rules (vNext)
 
 ### Objective
 Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your opponent's side** of the board.
@@ -52,29 +52,69 @@ Create a 4-in-a-row (horizontal, vertical, or diagonal) **entirely in your oppon
 - A 4-in-a-row that crosses the boundary does **not** count as a win
 - A 4-in-a-row in your own territory does **not** count as a win
 
-### Invasion Cap (NEW!)
-The game now enforces an **invasion cap** limiting how many of your pieces can exist on the opponent's half at once:
+### New Rules: FIFO-Based Caps (vNext)
 
-- **Default cap**: 8 pieces (configurable)
-- **Placement restriction**: You can place pieces anywhere on the board, but if you exceed the cap on opponent territory, you must immediately remove one of your pieces from that territory
-- **Turn order when cap exceeded**:
-  1. Place your piece
-  2. Select one of your pieces on opponent's half to remove (cannot remove the just-placed piece)
-  3. Win condition is checked after removal
-- **Visual indicator**: The UI displays your current invasion count (e.g., "Invasion: 5/8") with warning colors when approaching or exceeding the cap
-- **Strategic consideration**: Balance between infiltrating enemy territory and maintaining your invasion capacity
+#### A) Total On-Board Cap (Default: 15)
+Each player may have at most **TOTAL_CAP = 15** pieces on the board at any time.
 
-**Example scenario:**
-- You have 8 pieces on opponent's half (at cap: 8/8)
-- You place a 9th piece there (exceeds cap: 9/8)
-- You must immediately select one of your OTHER pieces on opponent's half to remove
-- After removal, you're back to 8/8 and your turn ends
+- **Trigger**: If placing a piece would cause you to exceed 15 total pieces
+- **Automatic removal**: Your **OLDEST piece on your HOME half** is automatically removed (FIFO)
+- **Fallback**: If you have NO pieces on your home half, your **oldest piece anywhere** is removed
+
+#### B) Opponent-Half Invasion Cap + Penalty (Default: 8)
+Each player may have at most **INVASION_CAP = 8** pieces on the opponent's half at any time.
+
+- **Trigger**: If placing a piece **on opponent's half** causes you to exceed 8 invasion pieces
+- **Automatic penalty**: Your **OLDEST piece on your HOME half** is automatically removed (FIFO)
+- **Fallback**: If you have NO pieces on your home half, your **oldest piece anywhere** is removed
+- **Important**: The penalty removes from your HOME half, not opponent half (strategic consequence)
+
+#### Resolution Order (Critical!)
+When you place a piece, the following happens **in this exact order**:
+
+1. **Place** your piece on the board
+2. **Invasion Penalty** (if you exceeded invasion cap on opponent half)
+3. **Total Cap** (if you exceeded total cap anywhere)
+4. **Win Check** (4-in-a-row validation)
+5. **Turn Switch** (if no win)
+
+**Why this order matters**: You cannot "momentarily" exceed caps to claim a win. Caps are enforced BEFORE win detection.
 
 ### Gameplay
 - Players alternate turns placing their piece (X or O) on any empty square
-- If invasion cap is exceeded, player must select a piece to remove before turn ends
-- After each completed turn, the game checks for a valid win condition
-- The game ends when a player achieves a valid 4-in-a-row or the board is full (draw)
+- Automatic removals happen immediately after placement (no player choice)
+- UI shows which pieces were removed and why (Invasion Penalty vs Total Cap)
+- After all removals and win check, turn switches to other player
+- Game ends when a player achieves valid 4-in-a-row or board is full (draw)
+
+### Example Scenarios
+
+**Scenario 1: Total Cap Exceeded**
+- You have 15 pieces on board (10 home, 5 opponent)
+- You place 16th piece on home half
+- **Result**: Your oldest home piece (1st placed) is automatically removed
+- Net effect: Still 15 total (9 home, 5 opponent + new piece)
+
+**Scenario 2: Invasion Penalty**
+- You have 12 pieces (4 home, 8 opponent) - at invasion cap
+- You place 9th piece on opponent half
+- **Result**: Your oldest HOME piece is automatically removed as penalty
+- Net effect: 11 total (3 home, 8 opponent + new piece)
+
+**Scenario 3: Both Caps Exceeded**
+- You have 15 pieces (2 home, 13 opponent) - ridiculous invasion!
+- You place 16th piece on opponent half
+- **Resolution**:
+  1. Place piece → 16 total, 14 invasion
+  2. Invasion penalty → Remove oldest home → 15 total, 14 invasion
+  3. Total cap (if still exceeded) → Remove oldest home (or fallback) → 14 total, 14 invasion
+- Note: Invasion penalty triggers first, then total cap
+
+**Scenario 4: Win After Removal**
+- You have 3 pieces on opponent half in positions (0, 1, 2) - 3-in-a-row
+- You place 4th piece at position 3 → 4-in-a-row complete!
+- But this exceeds invasion cap, so oldest home piece removed first
+- **Result**: Win is still detected after removal (4-in-a-row intact)
 
 ## 🚀 How to Play
 
@@ -125,11 +165,15 @@ The project follows a clean separation of concerns:
 - **Pure logic** with no DOM/UI dependencies
 - Deterministic and fully testable
 - Key methods:
-  - `applyMove(index)`: Apply a move and check win conditions (handles invasion cap)
-  - `removePiece(index)`: Remove a piece when invasion cap is exceeded
+  - `applyMove(index)`: Apply move with automatic FIFO cap enforcement
   - `checkWin(player)`: Validate 4-in-a-row with territory constraint
   - `isInOpponentHalf(index, player)`: Check if position is in opponent territory
+  - `isInHomeHalf(index, player)`: Check if position is in home territory
+  - `countTotalPieces(player)`: Count total pieces on board
   - `countPiecesOnOpponentHalf(player)`: Count pieces in opponent territory
+  - `countPiecesOnHomeHalf(player)`: Count pieces in home territory
+  - `findOldestPiece(player, preferHome)`: Find oldest piece for FIFO removal
+  - `removeOldestFromHome(player, reason)`: Automatic FIFO removal
   - `getValidMoves()`: Get all available positions
   - `reset()`: Start a new game
   - `getState()`/`loadState()`: Save/restore game state
@@ -160,15 +204,17 @@ The test suite validates:
 ❌ **3-in-a-row** without 4th piece (no false positives)
 ❌ **Disconnected pieces** (gaps in the line)
 
-**Invasion Cap Tests:**
-✅ **Invasion counting** increments correctly on opponent territory placement
-✅ **Cap threshold** triggers removal requirement when exceeded
-✅ **Piece removal** reduces invasion count correctly
-✅ **Removal restrictions**: Cannot remove pieces from home territory
-✅ **Removal restrictions**: Cannot remove the just-placed piece
-✅ **Win detection** works correctly after removal completes turn
-✅ **Movement blocking** during pending removal state
-✅ **Configurable cap** values (default: 8)
+**FIFO-Based Caps Tests (vNext):**
+✅ **Total cap at 15** enforced correctly
+✅ **Total cap exceeded** triggers automatic FIFO removal from home
+✅ **Invasion cap at 8** triggers automatic penalty removal from home
+✅ **FIFO selection** removes oldest piece by placement order
+✅ **Fallback to oldest-anywhere** when no home pieces exist
+✅ **Resolution order** invasion penalty → total cap → win check
+✅ **Win detection** occurs after all cap removals
+✅ **Configurable caps** totalCap and invasionCap
+✅ **Placement order tracking** with pieceData array
+✅ **Removal reasons** tracked (invasion_penalty vs total_cap)
 ✅ **Independent tracking** per player
 
 ## 🔮 Future Enhancements

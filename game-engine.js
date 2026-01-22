@@ -1,12 +1,14 @@
 /**
  * Checkerboard Tic-Tac-Toe Game Engine
  *
- * Rules:
+ * Rules (vNext):
  * - 8x8 board
  * - Two players: X and O
- * - Win condition: 4-in-a-row (horizontal, vertical, or diagonal)
- * - Critical constraint: The 4-in-a-row must be entirely in the opponent's side
- * - Invasion Cap: Maximum N pieces per player on opponent's half at once (default: 8)
+ * - Win condition: 4-in-a-row (horizontal, vertical, or diagonal) entirely in opponent's half
+ * - TOTAL_CAP: Maximum 15 pieces per player on board (default: 15)
+ * - INVASION_CAP: Maximum 8 pieces per player on opponent's half (default: 8)
+ * - FIFO Removal: When caps exceeded, automatically remove OLDEST piece from HOME half
+ * - Resolution order: Place → Invasion Penalty → Total Cap → Win Check
  *
  * Sides definition:
  * - X's home side: rows 5-8 (bottom half, indices 32-63)
@@ -24,7 +26,8 @@ class GameEngine {
     this.PLAYER_X = "X";
     this.PLAYER_O = "O";
 
-    // Invasion cap: max pieces on opponent half
+    // Caps
+    this.TOTAL_CAP = config.totalCap || 15;
     this.INVASION_CAP = config.invasionCap || 8;
 
     // Row indices that define the boundary
@@ -45,8 +48,14 @@ class GameEngine {
     this.winner = null;
     this.winningLine = null;
     this.moveHistory = [];
-    this.pendingRemoval = false; // Awaiting removal due to invasion cap
-    this.lastPlacedIndex = null; // Track last placed piece for invasion cap logic
+
+    // Track placement order for FIFO removal
+    // pieceData[index] = { player, turnIndex } or null
+    this.pieceData = Array(this.CELLS_COUNT).fill(null);
+    this.turnCounter = 0; // Monotonic counter for placement order
+
+    // Track automatic removals for this turn
+    this.autoRemovals = [];
   }
 
   /**
@@ -80,6 +89,32 @@ class GameEngine {
   }
 
   /**
+   * Check if index is in the home half for the given player
+   */
+  isInHomeHalf(index, player) {
+    if (player === this.PLAYER_X) {
+      // X's home half is bottom half (indices 32-63)
+      return index > this.TOP_HALF_MAX_INDEX;
+    } else {
+      // O's home half is top half (indices 0-31)
+      return index <= this.TOP_HALF_MAX_INDEX;
+    }
+  }
+
+  /**
+   * Count total pieces for player on entire board
+   */
+  countTotalPieces(player) {
+    let count = 0;
+    for (let i = 0; i < this.CELLS_COUNT; i++) {
+      if (this.board[i] === player) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Count how many of player's pieces are on opponent's half
    */
   countPiecesOnOpponentHalf(player) {
@@ -93,16 +128,85 @@ class GameEngine {
   }
 
   /**
-   * Get indices of player's pieces on opponent's half (for removal selection)
+   * Count how many of player's pieces are on home half
    */
-  getPiecesOnOpponentHalf(player) {
-    const pieces = [];
+  countPiecesOnHomeHalf(player) {
+    let count = 0;
     for (let i = 0; i < this.CELLS_COUNT; i++) {
-      if (this.board[i] === player && this.isInOpponentHalf(i, player)) {
-        pieces.push(i);
+      if (this.board[i] === player && this.isInHomeHalf(i, player)) {
+        count++;
       }
     }
-    return pieces;
+    return count;
+  }
+
+  /**
+   * Find the oldest piece for a player in a specific region
+   * Returns index or null
+   */
+  findOldestPiece(player, preferHome = true) {
+    let oldestIndex = null;
+    let oldestTurn = Infinity;
+
+    for (let i = 0; i < this.CELLS_COUNT; i++) {
+      if (this.board[i] === player && this.pieceData[i]) {
+        const isHome = this.isInHomeHalf(i, player);
+
+        if (preferHome && !isHome) {
+          // Skip non-home pieces if we prefer home
+          continue;
+        }
+
+        if (this.pieceData[i].turnIndex < oldestTurn) {
+          oldestTurn = this.pieceData[i].turnIndex;
+          oldestIndex = i;
+        }
+      }
+    }
+
+    // Fallback: if preferHome but no home pieces found, find oldest anywhere
+    if (preferHome && oldestIndex === null) {
+      return this.findOldestPiece(player, false);
+    }
+
+    return oldestIndex;
+  }
+
+  /**
+   * Remove a piece from the board (automatic FIFO removal)
+   * Returns index of removed piece or null
+   */
+  removeOldestFromHome(player, reason) {
+    const oldestIndex = this.findOldestPiece(player, true);
+
+    if (oldestIndex === null) {
+      return null;
+    }
+
+    const coords = this.indexToCoords(oldestIndex);
+
+    // Remove the piece
+    this.board[oldestIndex] = this.EMPTY;
+    this.pieceData[oldestIndex] = null;
+
+    // Record removal in history
+    this.moveHistory.push({
+      type: 'removal',
+      player: player,
+      index: oldestIndex,
+      row: coords.row,
+      col: coords.col,
+      reason: reason
+    });
+
+    // Track for this turn's UI notification
+    this.autoRemovals.push({
+      index: oldestIndex,
+      coords: coords,
+      reason: reason
+    });
+
+    return oldestIndex;
   }
 
   /**
@@ -112,8 +216,7 @@ class GameEngine {
     return index >= 0 &&
            index < this.CELLS_COUNT &&
            this.board[index] === this.EMPTY &&
-           !this.gameOver &&
-           !this.pendingRemoval; // Can't place if removal pending
+           !this.gameOver;
   }
 
   /**
@@ -127,13 +230,14 @@ class GameEngine {
 
   /**
    * Apply a move to the board
-   * Returns { success: boolean, message: string }
+   * Returns { success: boolean, message: string, ... }
    *
-   * Turn order with invasion cap:
+   * Resolution order:
    * 1. Place piece
-   * 2. Check if invasion cap exceeded
-   * 3. If exceeded, require removal (pendingRemoval = true)
-   * 4. If not exceeded, check win and switch player
+   * 2. Apply invasion penalty if opponent-half count exceeded
+   * 3. Apply total cap if total count exceeded
+   * 4. Check win condition
+   * 5. Switch player
    */
   applyMove(index) {
     if (this.gameOver) {
@@ -144,86 +248,44 @@ class GameEngine {
       return { success: false, message: "Invalid move" };
     }
 
-    // Place the piece
+    // Clear auto-removals from previous turn
+    this.autoRemovals = [];
+
+    // 1. Place the piece
     this.board[index] = this.currentPlayer;
-    this.lastPlacedIndex = index;
+    this.pieceData[index] = {
+      player: this.currentPlayer,
+      turnIndex: this.turnCounter++
+    };
 
     // Record move history
     const coords = this.indexToCoords(index);
     this.moveHistory.push({
+      type: 'placement',
       player: this.currentPlayer,
       index,
       row: coords.row,
       col: coords.col
     });
 
-    // Check invasion cap BEFORE win check
-    const piecesOnOpponentHalf = this.countPiecesOnOpponentHalf(this.currentPlayer);
-    if (piecesOnOpponentHalf > this.INVASION_CAP) {
-      // Cap exceeded - require removal
-      this.pendingRemoval = true;
-      const removablePieces = this.getPiecesOnOpponentHalf(this.currentPlayer);
-      return {
-        success: true,
-        message: `Invasion cap exceeded (${piecesOnOpponentHalf}/${this.INVASION_CAP}). Select a piece to remove.`,
-        invasionCapExceeded: true,
-        removablePieces,
-        currentCount: piecesOnOpponentHalf,
-        cap: this.INVASION_CAP
-      };
+    // 2. Check invasion cap and apply penalty
+    const onOpponentHalf = this.isInOpponentHalf(index, this.currentPlayer);
+    if (onOpponentHalf) {
+      const invasionCount = this.countPiecesOnOpponentHalf(this.currentPlayer);
+      if (invasionCount > this.INVASION_CAP) {
+        // Invasion penalty: remove oldest home piece
+        this.removeOldestFromHome(this.currentPlayer, 'invasion_penalty');
+      }
     }
 
-    // No cap issue - proceed with normal win check and turn switch
-    return this.completeTurn();
-  }
-
-  /**
-   * Remove a piece from the board (invasion cap enforcement)
-   * Returns { success: boolean, message: string }
-   */
-  removePiece(index) {
-    if (!this.pendingRemoval) {
-      return { success: false, message: "No removal required" };
+    // 3. Check total cap
+    const totalCount = this.countTotalPieces(this.currentPlayer);
+    if (totalCount > this.TOTAL_CAP) {
+      // Total cap: remove oldest home piece
+      this.removeOldestFromHome(this.currentPlayer, 'total_cap');
     }
 
-    // Validate: must be current player's piece on opponent half
-    if (this.board[index] !== this.currentPlayer) {
-      return { success: false, message: "Not your piece" };
-    }
-
-    if (!this.isInOpponentHalf(index, this.currentPlayer)) {
-      return { success: false, message: "Piece not on opponent half" };
-    }
-
-    // Don't allow removing the just-placed piece
-    if (index === this.lastPlacedIndex) {
-      return { success: false, message: "Cannot remove the piece you just placed" };
-    }
-
-    // Remove the piece
-    this.board[index] = this.EMPTY;
-    this.pendingRemoval = false;
-
-    // Record removal in history
-    const coords = this.indexToCoords(index);
-    this.moveHistory.push({
-      type: 'removal',
-      player: this.currentPlayer,
-      index,
-      row: coords.row,
-      col: coords.col
-    });
-
-    // Now complete the turn (check win, switch player)
-    return this.completeTurn();
-  }
-
-  /**
-   * Complete the turn after placement (and optional removal)
-   * Check for win, draw, and switch player
-   */
-  completeTurn() {
-    // Check for win
+    // 4. Check for win
     const winResult = this.checkWin(this.currentPlayer);
     if (winResult.isWin) {
       this.gameOver = true;
@@ -234,7 +296,10 @@ class GameEngine {
         message: `${this.currentPlayer} wins!`,
         gameOver: true,
         winner: this.currentPlayer,
-        winningLine: winResult.line
+        winningLine: winResult.line,
+        autoRemovals: this.autoRemovals,
+        totalPieces: this.countTotalPieces(this.currentPlayer),
+        invasionPieces: this.countPiecesOnOpponentHalf(this.currentPlayer)
       };
     }
 
@@ -245,17 +310,21 @@ class GameEngine {
         success: true,
         message: "Draw!",
         gameOver: true,
-        winner: null
+        winner: null,
+        autoRemovals: this.autoRemovals
       };
     }
 
-    // Switch players
+    // 5. Switch players
     this.currentPlayer = this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X;
 
     return {
       success: true,
       message: "Move applied",
-      gameOver: false
+      gameOver: false,
+      autoRemovals: this.autoRemovals,
+      totalPieces: this.countTotalPieces(this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X),
+      invasionPieces: this.countPiecesOnOpponentHalf(this.currentPlayer === this.PLAYER_X ? this.PLAYER_O : this.PLAYER_X)
     };
   }
 
@@ -342,8 +411,9 @@ class GameEngine {
       winner: this.winner,
       winningLine: this.winningLine ? [...this.winningLine] : null,
       moveHistory: [...this.moveHistory],
-      pendingRemoval: this.pendingRemoval,
-      lastPlacedIndex: this.lastPlacedIndex,
+      pieceData: [...this.pieceData],
+      turnCounter: this.turnCounter,
+      totalCap: this.TOTAL_CAP,
       invasionCap: this.INVASION_CAP
     };
   }
@@ -358,8 +428,8 @@ class GameEngine {
     this.winner = state.winner;
     this.winningLine = state.winningLine ? [...state.winningLine] : null;
     this.moveHistory = [...state.moveHistory];
-    this.pendingRemoval = state.pendingRemoval || false;
-    this.lastPlacedIndex = state.lastPlacedIndex || null;
+    this.pieceData = [...state.pieceData];
+    this.turnCounter = state.turnCounter || 0;
   }
 }
 
